@@ -1,0 +1,829 @@
+# ═══════════════════════════════════════════════════════════
+# math_shell — comprehensive test suite
+# Run with:  grep -v '^#' test_commands.txt | ./parse
+# Every result is verified with == so you can grep for "0"
+# to find any failures.
+#
+# Use: parse < testcommands.txt
+# ═══════════════════════════════════════════════════════════
+# ───────────────────────────────────────────────────────────
+# SCALAR ARITHMETIC — basic operators
+# ───────────────────────────────────────────────────────────
+2 + 3
+2 + 3 == 5
+10 - 4
+10 - 4 == 6
+6 * 7
+6 * 7 == 42
+20 / 4
+20 / 4 == 5
+# operator precedence: * before +
+2 + 3 * 4
+2 + 3 * 4 == 14
+# parentheses override precedence
+(2 + 3) * 4
+(2 + 3) * 4 == 20
+# nested parentheses
+((2 + 3) * (1 + 1))
+((2 + 3) * (1 + 1)) == 10
+# unary minus
+-5 + 3
+-5 + 3 == -2
+# unary plus
++7 - 2
++7 - 2 == 5
+# chained operations
+100 / (2 + 3)
+100 / (2 + 3) == 20
+# integer division giving fraction
+7 / 2
+7 / 2 == 3.5
+# negative result
+3 - 10
+3 - 10 == -7
+# ───────────────────────────────────────────────────────────
+# SCALAR FUNCTIONS
+# ───────────────────────────────────────────────────────────
+sin(0)
+sin(0) == 0
+cos(0)
+cos(0) == 1
+tan(0)
+tan(0) == 0
+sqrt(144)
+sqrt(144) == 12
+sqrt(2)
+sqrt(2) * sqrt(2) == 2
+abs(-42)
+abs(-42) == 42
+abs(42)
+abs(42) == 42
+log(1)
+log(1) == 0
+exp(0)
+exp(0) == 1
+# log and exp are inverses
+log(exp(1)) == 1
+# sin² + cos² = 1
+$angle = 1.2
+sin($angle) * sin($angle) + cos($angle) * cos($angle) == 1
+# ───────────────────────────────────────────────────────────
+# SCALAR VARIABLES — assignment and retrieval
+# ───────────────────────────────────────────────────────────
+$x = 10
+$x == 10
+$y = 3.5
+$y == 3.5
+$z = $x + $y
+$z == 13.5
+$neg = -$x
+$neg == -10
+$pi = 3.14159265358979
+$pi == 3.14159265358979
+$r = sqrt($x * $x + $y * $y)
+$r == sqrt(100 + 12.25)
+# variable used in expression
+$x * 2 == 20
+$y + 0.5 == 4
+# overwrite a variable
+$x = 99
+$x == 99
+$x = 10
+$x == 10
+# ───────────────────────────────────────────────────────────
+# COMPARISON OPERATORS — ==
+# ───────────────────────────────────────────────────────────
+1 == 1
+1 == 2
+0 == 0
+-3 == -3
+-3 == 3
+sqrt(4) == 2
+$x == 10
+$x == 999
+# ───────────────────────────────────────────────────────────
+# COMPARISON OPERATORS — !=
+# ───────────────────────────────────────────────────────────
+1 != 2
+1 != 1
+0 != 1
+$x != 99
+$x != 10
+# ───────────────────────────────────────────────────────────
+# COMPARISON OPERATORS — < and >
+# ───────────────────────────────────────────────────────────
+3 < 5
+5 < 3
+3 < 3
+5 > 3
+3 > 5
+3 > 3
+$x > 5
+$x < 5
+0 > -1
+-1 < 0
+# ───────────────────────────────────────────────────────────
+# COMPARISON OPERATORS — <= and >=
+# ───────────────────────────────────────────────────────────
+3 <= 5
+5 <= 3
+3 <= 3
+5 >= 3
+3 >= 5
+3 >= 3
+$x >= 10
+$x <= 10
+$x >= 11
+$x <= 9
+# ───────────────────────────────────────────────────────────
+# COMPARISONS STORED IN VARIABLES
+# ───────────────────────────────────────────────────────────
+$flag = ($x == 10)
+$flag == 1
+$flag2 = ($x > 100)
+$flag2 == 0
+# arithmetic on boolean results
+$a = ($x == 10) + ($y == 3.5)
+$a == 2
+$b = ($x > 5) + ($x > 15)
+$b == 1
+# ───────────────────────────────────────────────────────────
+# SCALAR VARIABLE LISTING
+# ───────────────────────────────────────────────────────────
+vars
+# ───────────────────────────────────────────────────────────
+# MATRIX LITERALS
+# ───────────────────────────────────────────────────────────
+[1 2 3]
+[1; 2; 3]
+[1 2; 3 4]
+[1, 2, 3; 4, 5, 6]
+[0 0; 0 0]
+[1 0 0; 0 1 0; 0 0 1]
+# ───────────────────────────────────────────────────────────
+# MATRIX VARIABLES — assignment and retrieval
+# ───────────────────────────────────────────────────────────
+$A = [1 2; 3 4]
+$B = [5 6; 7 8]
+$I2 = [1 0; 0 1]
+$Z  = [0 0; 0 0]
+$M3 = [1 0 0; 0 1 0; 0 0 1]
+$A
+$B
+# ───────────────────────────────────────────────────────────
+# MATRIX ARITHMETIC
+# ───────────────────────────────────────────────────────────
+$A + $B
+$B - $A
+$A + $Z
+$A * $I2
+$I2 * $A
+$A * $B
+$B * $A
+# 3x3 identity times itself = identity
+$M3 * $M3
+# ───────────────────────────────────────────────────────────
+# MATRIX FUNCTIONS — transpose
+# ───────────────────────────────────────────────────────────
+transpose($A)
+transpose($B)
+transpose($M3)
+# double transpose recovers the original
+transpose(transpose($A))
+# ───────────────────────────────────────────────────────────
+# MATRIX FUNCTIONS — inv
+# ───────────────────────────────────────────────────────────
+inv($A)
+inv($B)
+inv($I2)
+# A * inv(A) = I
+$A * inv($A)
+# inv(A) * A = I
+inv($A) * $A
+# ───────────────────────────────────────────────────────────
+# MATRIX FUNCTIONS — scale
+# ───────────────────────────────────────────────────────────
+scale($A, 2)
+scale($B, 0.5)
+scale($I2, 5)
+scale($A, -1)
+scale($A, 0)
+# ───────────────────────────────────────────────────────────
+# MATRIX FUNCTIONS — det
+# ───────────────────────────────────────────────────────────
+det($A)
+det($A) == -2
+det($I2)
+det($I2) == 1
+det($B)
+det($B) == -2
+$D3 = [2 0 0; 0 3 0; 0 0 4]
+det($D3)
+det($D3) == 24
+# ───────────────────────────────────────────────────────────
+# MATRIX CHAINING
+# ───────────────────────────────────────────────────────────
+$E = [3 1; 2 4]
+$F = [1 2; 0 1]
+$E * $F
+$E * $F + $F
+transpose($E) * $E
+scale($A * $B, 0.5)
+# ───────────────────────────────────────────────────────────
+# MATRIX VARIABLE LISTING
+# ───────────────────────────────────────────────────────────
+mats
+# ═══════════════════════════════════════════════════════════
+# HYDRAULICS — MANNING'S EQUATION
+# ═══════════════════════════════════════════════════════════
+# SI — velocity only
+manning n=0.013 R=0.5 S=0.001
+$manning_V > 0
+# SI — with flow area
+manning n=0.025 R=1.2 S=0.0005 A=3.6
+$manning_Q > 0
+$manning_Q == $manning_V * 3.6
+# SI — with Froude number (subcritical)
+manning n=0.025 R=1.0 S=0.002 A=4.0 D=0.8
+$manning_Fr > 0
+# US customary
+manning n=0.013 R=1.5 S=0.001 units=us
+$manning_V > 0
+# US customary with area and depth
+manning n=0.025 R=3.0 S=0.0008 A=20.0 D=2.5 units=us
+$manning_Q > 0
+# expression-valued parameters
+$n_val = 0.015
+$slope = 1/1000
+manning n=$n_val R=0.8 S=$slope A=2.5
+$manning_Q > 0
+# steep slope — expect supercritical Froude
+manning n=0.013 R=0.3 S=0.05 A=0.5 D=0.2
+$manning_Fr > 1
+# roughness table
+manning ?
+# ═══════════════════════════════════════════════════════════
+# FLUID MECHANICS
+# ═══════════════════════════════════════════════════════════
+# ── Reynolds Number ────────────────────────────────────────
+# turbulent pipe flow
+reynolds V=1.5 D=0.05 nu=1.004e-6
+$Re > 4000
+# laminar flow
+reynolds V=0.01 D=0.05 nu=1.004e-6
+$Re < 2300
+# transitional
+reynolds V=0.05 D=0.05 nu=1.004e-6
+$Re > 2300
+$Re < 4000
+# turbulent air flow
+reynolds V=15 D=0.1 nu=1.516e-5
+$Re > 4000
+# rho + mu form
+reynolds V=2.0 D=0.08 rho=1000 mu=0.001
+$Re > 0
+# verify both forms give same Re for water at 20 degrees C
+reynolds V=1.0 D=0.1 nu=1.004e-6
+$Re_nu = $Re
+reynolds V=1.0 D=0.1 rho=1000 mu=1.004e-3
+$Re_mu = $Re
+$Re_nu == $Re_mu
+# ── Darcy-Weisbach ─────────────────────────────────────────
+darcy f=0.02 L=100 D=0.05 V=1.5
+$darcy_hf > 0
+# longer pipe = proportionally more head loss
+darcy f=0.02 L=200 D=0.05 V=1.5
+$darcy_hf_long = $darcy_hf
+darcy f=0.02 L=100 D=0.05 V=1.5
+$darcy_hf_short = $darcy_hf
+$darcy_hf_long == $darcy_hf_short * 2
+# higher velocity = more head loss
+darcy f=0.02 L=100 D=0.05 V=3.0
+$darcy_hf_fast = $darcy_hf
+darcy f=0.02 L=100 D=0.05 V=1.5
+$darcy_hf_slow = $darcy_hf
+$darcy_hf_fast > $darcy_hf_slow
+# US units
+darcy f=0.02 L=100 D=0.05 V=1.5 units=us
+$darcy_hf > 0
+# ── Bernoulli's Equation ───────────────────────────────────
+# solve for P2
+bernoulli P1=200000 V1=1.0 z1=10 V2=3.0 z2=5 rho=1000 solve=P2
+$bern_P2 > 0
+# solve for V2 using elevation head only
+bernoulli P1=101325 V1=0 z1=5 P2=101325 V2=0 z2=0 rho=1000 solve=V2
+$bern_V2 > 0
+# solve for z2
+bernoulli P1=300000 V1=2.0 z1=0 P2=250000 V2=2.0 z2=0 rho=1000 solve=z2
+$bern_z2 > 0
+# solve for V1
+bernoulli P1=200000 V1=0 z1=0 P2=100000 V2=0 z2=0 rho=1000 solve=V1
+$bern_V1 > 0
+# solve for z1
+bernoulli P1=0 V1=4.0 z1=0 P2=0 V2=0 z2=0 rho=1000 solve=z1
+$bern_z1 < 0
+# solve for P1
+bernoulli P1=0 V1=2.0 z1=5 P2=50000 V2=4.0 z2=3 rho=1000 solve=P1
+$bern_P1 > 0
+# ── Orifice Flow ───────────────────────────────────────────
+orifice Cd=0.61 A=0.005 h=2.0
+$orifice_Q > 0
+$orifice_V > 0
+# higher head = more flow
+orifice Cd=0.61 A=0.005 h=8.0
+$orifice_Q_high = $orifice_Q
+orifice Cd=0.61 A=0.005 h=2.0
+$orifice_Q_low = $orifice_Q
+$orifice_Q_high > $orifice_Q_low
+# rounded entry — higher Cd than sharp-edged
+orifice Cd=0.98 A=0.005 h=2.0
+$orifice_Q_rounded = $orifice_Q
+orifice Cd=0.61 A=0.005 h=2.0
+$orifice_Q_sharp = $orifice_Q
+$orifice_Q_rounded > $orifice_Q_sharp
+# computed area from a radius
+$r_ori = 0.04
+$A_ori = $pi * $r_ori * $r_ori
+orifice Cd=0.61 A=$A_ori h=3.0
+$orifice_Q > 0
+# US units
+orifice Cd=0.61 A=0.005 h=2.0 units=us
+$orifice_Q > 0
+# ═══════════════════════════════════════════════════════════
+# STRUCTURAL MECHANICS
+# ═══════════════════════════════════════════════════════════
+# ── Beam Deflection ────────────────────────────────────────
+# simply supported — center point load
+beam type=ss load=point P=5000 L=6 E=200e9 I=8.33e-6
+$beam_delta > 0
+$beam_Mmax == 5000 * 6 / 4
+$beam_R == 5000
+# simply supported — UDL
+beam type=ss load=udl w=2000 L=4 E=200e9 I=8.33e-6
+$beam_delta > 0
+$beam_Mmax == 2000 * 16 / 8
+$beam_R == 2000 * 4
+# cantilever — tip point load
+beam type=cant load=point P=1000 L=3 E=200e9 I=4.16e-6
+$beam_delta > 0
+$beam_Mmax == 1000 * 3
+# cantilever — UDL
+beam type=cant load=udl w=500 L=2 E=70e9 I=1e-6
+$beam_delta > 0
+$beam_Mmax == 500 * 4 / 2
+# longer span = larger deflection (SS point load, same P E I)
+beam type=ss load=point P=5000 L=8 E=200e9 I=8.33e-6
+$beam_delta_long = $beam_delta
+beam type=ss load=point P=5000 L=4 E=200e9 I=8.33e-6
+$beam_delta_short = $beam_delta
+$beam_delta_long > $beam_delta_short
+# expression-valued inputs
+$span = 6
+$load = 10000
+beam type=ss load=point P=$load L=$span E=200e9 I=8.33e-6
+$beam_delta > 0
+# ── Axial Stress and Strain ────────────────────────────────
+# stress only
+stress F=50000 A=0.002
+$stress_sigma == 50000 / 0.002
+# stress + strain
+stress F=50000 A=0.002 E=200e9
+$stress_sigma > 0
+$stress_eps == $stress_sigma / 200e9
+# stress + strain + deformation
+stress F=50000 A=0.002 E=200e9 L=1.5
+$stress_delta == $stress_eps * 1.5
+# compression (negative force)
+stress F=-30000 A=0.001 E=70e9 L=2.0
+$stress_sigma < 0
+$stress_eps < 0
+$stress_delta < 0
+# larger area = smaller stress for same force
+stress F=50000 A=0.004 E=200e9
+$stress_sigma_big = $stress_sigma
+stress F=50000 A=0.002 E=200e9
+$stress_sigma_small = $stress_sigma
+$stress_sigma_big < $stress_sigma_small
+# ── Mohr's Circle ──────────────────────────────────────────
+# general stress state
+mohrs sx=80 sy=20 txy=30
+$mohrs_s1 > $mohrs_s2
+$mohrs_tmax > 0
+$mohrs_theta > 0
+# pure shear: sx=sy=0, principal stresses = +/-txy
+mohrs sx=0 sy=0 txy=50
+$mohrs_s1 == 50
+$mohrs_s2 == -50
+$mohrs_tmax == 50
+# uniaxial tension: sy=0, txy=0 → s1=sx, s2=0
+mohrs sx=100 sy=0 txy=0
+$mohrs_s1 == 100
+$mohrs_s2 == 0
+# equal biaxial: tmax=0
+mohrs sx=60 sy=60 txy=0
+$mohrs_s1 == 60
+$mohrs_s2 == 60
+$mohrs_tmax == 0
+# hydrostatic compression
+mohrs sx=-50 sy=-50 txy=0
+$mohrs_s1 == -50
+$mohrs_s2 == -50
+# s1 always >= s2
+mohrs sx=-30 sy=70 txy=40
+$mohrs_s1 > $mohrs_s2
+# ═══════════════════════════════════════════════════════════
+# THERMODYNAMICS
+# ═══════════════════════════════════════════════════════════
+# ── Ideal Gas Law ──────────────────────────────────────────
+# solve P
+idealgas V=0.5 n=2 T=300 solve=P
+$gas_P > 0
+$gas_P == 2 * 8.314 * 300 / 0.5
+# solve V
+idealgas P=101325 n=1 T=273.15 solve=V
+$gas_V > 0
+# solve n
+idealgas P=200000 V=1.0 T=350 solve=n
+$gas_n > 0
+$gas_n == 200000 * 1.0 / (8.314 * 350)
+# solve T
+idealgas P=101325 V=0.0224 n=1 solve=T
+$gas_T > 0
+# doubling n doubles P at constant V and T
+idealgas V=1 n=1 T=300 solve=P
+$P1 = $gas_P
+idealgas V=1 n=2 T=300 solve=P
+$P2 = $gas_P
+$P2 == $P1 * 2
+# US customary
+idealgas V=1.0 n=1 T=530 solve=P units=us
+$gas_P > 0
+# ── Heat Conduction ────────────────────────────────────────
+conduction k=50 A=0.1 dT=80 L=0.02
+$cond_Q > 0
+$cond_Q == 50 * 0.1 * 80 / 0.02
+$cond_flux == 50 * 80 / 0.02
+$cond_Rth == 0.02 / (50 * 0.1)
+# thicker slab = lower heat flow
+conduction k=50 A=0.1 dT=80 L=0.04
+$cond_Q_thick = $cond_Q
+conduction k=50 A=0.1 dT=80 L=0.02
+$cond_Q_thin = $cond_Q
+$cond_Q_thin > $cond_Q_thick
+# higher conductivity = more heat flow
+conduction k=401 A=0.1 dT=80 L=0.02
+$cond_Q_copper = $cond_Q
+conduction k=1.7 A=0.1 dT=80 L=0.02
+$cond_Q_concrete = $cond_Q
+$cond_Q_copper > $cond_Q_concrete
+# concrete wall
+conduction k=1.7 A=2.0 dT=20 L=0.3
+$cond_Q > 0
+# air gap
+conduction k=0.026 A=1.0 dT=15 L=0.05
+$cond_Q > 0
+# US units
+conduction k=50 A=0.1 dT=80 L=0.02 units=us
+$cond_Q > 0
+# ── Specific Heat ──────────────────────────────────────────
+# default solve=Q
+specificheat m=2 c=4186 dT=10
+$heat_Q == 2 * 4186 * 10
+$heat_Q > 0
+# solve=Q explicit
+specificheat m=5 c=490 dT=50 solve=Q
+$heat_Q == 5 * 490 * 50
+# solve for m
+specificheat Q=83720 c=4186 dT=10 solve=m
+$heat_m == 2
+# solve for c
+specificheat Q=10000 m=2 dT=25 solve=c
+$heat_c == 10000 / (2 * 25)
+# solve for dT
+specificheat Q=50000 m=3 c=900 solve=dT
+$heat_dT == 50000 / (3 * 900)
+# round-trip: solve Q then back-solve m
+specificheat m=4 c=4186 dT=20 solve=Q
+$Q_rt = $heat_Q
+specificheat Q=$Q_rt c=4186 dT=20 solve=m
+$heat_m == 4
+# ═══════════════════════════════════════════════════════════
+# CROSS-DOMAIN CHAINS
+# ═══════════════════════════════════════════════════════════
+# 1. Manning velocity → Reynolds → Darcy
+manning n=0.013 R=0.25 S=0.002 A=0.196
+$V_pipe = $manning_V
+reynolds V=$V_pipe D=0.5 nu=1.004e-6
+$Re > 0
+darcy f=0.018 L=200 D=0.5 V=$V_pipe
+$darcy_hf > 0
+# 2. Beam reaction → axial stress in a support column
+beam type=ss load=point P=12000 L=5 E=200e9 I=1e-5
+$col_force = $beam_R
+stress F=$col_force A=0.002 E=200e9 L=0.5
+$stress_sigma == $col_force / 0.002
+$stress_delta > 0
+# 3. Ideal gas temperature → specific heat load
+idealgas P=101325 V=0.02 n=0.8 solve=T
+$gas_temp = $gas_T
+specificheat m=0.8 c=717 dT=$gas_temp
+$heat_Q > 0
+# 4. Orifice area from a computed radius
+$r_o = 0.05
+$A_o = $pi * $r_o * $r_o
+orifice Cd=0.61 A=$A_o h=5.0
+$orifice_Q > 0
+# 5. Mohr's principal stresses → scale identity matrix
+mohrs sx=80 sy=20 txy=30
+$s1 = $mohrs_s1
+$s2 = $mohrs_s2
+$s1 > $s2
+$Ip = scale($I2, $s1)
+$Ip
+# 6. Bernoulli velocity → Reynolds number
+bernoulli P1=300000 V1=0 z1=0 P2=100000 V2=0 z2=0 rho=1000 solve=V2
+reynolds V=$bern_V2 D=0.1 nu=1.004e-6
+$Re > 0
+# 7. Conduction thermal resistance check
+conduction k=50 A=0.2 dT=60 L=0.01
+$Rth = $cond_Rth
+$Rth == 0.01 / (50 * 0.2)
+# ═══════════════════════════════════════════════════════════
+# EDGE CASES
+# ═══════════════════════════════════════════════════════════
+# floating-point equality via epsilon
+sqrt(2) * sqrt(2) == 2
+sin($pi) == 0
+cos($pi) == -1
+# very small and large numbers
+1e-10 * 1e10 == 1
+1e6 / 1e3 == 1000
+# chained comparisons stored and summed
+$c1 = (10 > 5)
+$c2 = (3 != 4)
+$c3 = (2 <= 2)
+$c1 + $c2 + $c3 == 3
+# comparison of computed results
+$v1 = sqrt(25)
+$v2 = abs(-5)
+$v1 == $v2
+# negative comparisons
+-5 < 0
+0 > -5
+-3 >= -3
+-3 <= -3
+-4 != -3
+# ═══════════════════════════════════════════════════════════
+# CONTROL SYSTEMS — PID CONTROLLER
+# ═══════════════════════════════════════════════════════════
+# ── pid reset — zeroes persisted state ─────────────────────
+pid reset
+$pid_integral == 0
+$pid_prev_err == 0
+# ── pid step — proportional only (Ki=Kd=0) ─────────────────
+# error = sp - pv = 100 - 60 = 40
+# integral = 0 + 40*1 = 40   (persisted but unused with Ki=0)
+# derivative = (40 - 0) / 1 = 40   (persisted but unused with Kd=0)
+# output = Kp*e = 2*40 = 80
+pid step Kp=2 Ki=0 Kd=0 sp=100 pv=60 dt=1
+$pid_error == 40
+$pid_out == 80
+$pid_out > 0
+# ── pid step — state persists across successive calls ───────
+# state after above: pid_integral=40, pid_prev_err=40
+# error = 100 - 70 = 30
+# integral = 40 + 30*1 = 70
+# derivative = (30 - 40) / 1 = -10   (Kd=0 so no effect)
+# output = 2*30 = 60
+pid step Kp=2 Ki=0 Kd=0 sp=100 pv=70 dt=1
+$pid_out == 60
+$pid_error == 30
+$pid_integral == 70
+# reducing pv error reduces P-only output
+$pid_out < 80
+# ── pid step — integral action only (Kp=Kd=0) ──────────────
+pid reset
+# error=10, integral=0+10*2=20, output=Ki*integral=1*20=20
+pid step Kp=0 Ki=1 Kd=0 sp=10 pv=0 dt=2
+$pid_out == 20
+$pid_integral == 20
+# second call: integral accumulates
+# error=10, integral=20+10*2=40, output=1*40=40
+pid step Kp=0 Ki=1 Kd=0 sp=10 pv=0 dt=2
+$pid_out == 40
+$pid_integral == 40
+$pid_out > 20
+# ── pid step — derivative action only (Kp=Ki=0) ────────────
+pid reset
+# error=30, prev_err=0, derivative=(30-0)/1=30, output=Kd*deriv=3*30=90
+pid step Kp=0 Ki=0 Kd=3 sp=50 pv=20 dt=1
+$pid_out == 90
+# second call: same pv, error unchanged → derivative=0, output=0
+pid step Kp=0 Ki=0 Kd=3 sp=50 pv=20 dt=1
+$pid_out == 0
+$pid_out < 90
+# ── pid step — full PID, known values ──────────────────────
+pid reset
+# error=20, integral=0+20*0.5=10, derivative=(20-0)/0.5=40
+# output = 1*20 + 0.5*10 + 0.25*40 = 20 + 5 + 10 = 35
+pid step Kp=1 Ki=0.5 Kd=0.25 sp=20 pv=0 dt=0.5
+$pid_error == 20
+$pid_integral == 10
+$pid_out == 35
+# ── pid step — zero error gives zero output (fresh state) ───
+pid reset
+pid step Kp=5 Ki=2 Kd=1 sp=50 pv=50 dt=1
+$pid_error == 0
+$pid_out == 0
+# ── pid step — negative error (pv > sp) ────────────────────
+pid reset
+# error = 0 - 10 = -10, output = Kp*e = 2*(-10) = -20
+pid step Kp=2 Ki=0 Kd=0 sp=0 pv=10 dt=1
+$pid_error == -10
+$pid_out == -20
+$pid_out < 0
+# ── pid step — output clamping (omax) ──────────────────────
+pid reset
+# Kp=10, error=100, raw output=1000, clamped to omax=50
+pid step Kp=10 Ki=0 Kd=0 sp=100 pv=0 dt=1 omax=50
+$pid_out == 50
+$pid_out <= 50
+# output clamp low (omin): error=-100, raw=-1000, clamped to omin=-50
+pid reset
+pid step Kp=10 Ki=0 Kd=0 sp=0 pv=100 dt=1 omin=-50
+$pid_out == -50
+$pid_out >= -50
+# ── pid step — integrator clamping (imax) ──────────────────
+pid reset
+# error=10, raw integral=10*1=10, clamped to imax=6
+# output = Ki*clamped_integral = 4*6 = 24
+pid step Kp=0 Ki=4 Kd=0 sp=10 pv=0 dt=1 imax=6
+$pid_integral == 6
+$pid_out == 24
+# integrator clamp low (imin): error=-10, raw integral=-10, clamped to imin=-6
+pid reset
+pid step Kp=0 Ki=4 Kd=0 sp=0 pv=10 dt=1 imin=-6
+$pid_integral == -6
+$pid_out == -24
+# ── pid step — expression-valued parameters ─────────────────
+pid reset
+$sp_val = 80
+$pv_val = 30
+$Kp_val = 3
+# error=50, output=Kp*error=3*50=150
+pid step Kp=$Kp_val Ki=0 Kd=0 sp=$sp_val pv=$pv_val dt=1
+$pid_error == $sp_val - $pv_val
+$pid_out == $Kp_val * ($sp_val - $pv_val)
+# ── pid sim — pv moves toward setpoint ─────────────────────
+# PI controller, first-order plant (gain=1, tau=1)
+pid sim Kp=1 Ki=0.5 Kd=0 sp=1 pv0=0 dt=0.1 n=50 gain=1 tau=1
+$pid_pv > 0
+# pv should be heading toward sp=1 but not overshot wildly
+$pid_pv < 1.5
+# more steps → closer to setpoint
+pid sim Kp=1 Ki=0.5 Kd=0 sp=1 pv0=0 dt=0.1 n=20 gain=1 tau=1
+$pv_20 = $pid_pv
+pid sim Kp=1 Ki=0.5 Kd=0 sp=1 pv0=0 dt=0.1 n=100 gain=1 tau=1
+$pv_100 = $pid_pv
+$pv_100 > $pv_20
+# well-tuned PID converges close to setpoint within 200 steps
+pid sim Kp=2 Ki=1 Kd=0.1 sp=10 pv0=0 dt=0.1 n=200 gain=1 tau=1
+$pid_pv > 9
+# higher plant gain → faster approach to setpoint in same step count
+pid sim Kp=1 Ki=0.5 Kd=0 sp=1 pv0=0 dt=0.1 n=15 gain=2 tau=1
+$pv_gain2 = $pid_pv
+pid sim Kp=1 Ki=0.5 Kd=0 sp=1 pv0=0 dt=0.1 n=15 gain=0.5 tau=1
+$pv_gain05 = $pid_pv
+$pv_gain2 > $pv_gain05
+# sim stores output and pv variables
+pid sim Kp=1 Ki=0.5 Kd=0 sp=5 pv0=0 dt=0.1 n=100 gain=1 tau=1
+$pid_pv > 0
+$pid_out > 0
+# pv0 persists as starting point — non-zero pv0
+pid sim Kp=1 Ki=0 Kd=0 sp=10 pv0=8 dt=0.1 n=10 gain=1 tau=1
+$pid_pv > 0
+$pid_pv < 10
+# negative setpoint — pv should move below zero
+pid sim Kp=1 Ki=0.5 Kd=0 sp=-5 pv0=0 dt=0.1 n=80 gain=1 tau=1
+$pid_pv < 0
+# ── pid tune — Ziegler-Nichols ultimate-gain, PID ──────────
+# Ku=4 Tu=2: Kp=0.6*4=2.4, Ti=Tu/2=1, Td=Tu/8=0.25
+#            Ki=Kp/Ti=2.4, Kd=Kp*Td=0.6
+pid tune method=zn Ku=4 Tu=2 type=PID
+$pid_Kp == 0.6 * 4
+$pid_Ti == 2 / 2
+$pid_Td == 2 / 8
+$pid_Ki == 2.4
+$pid_Kd == 2.4 * 0.25
+$pid_Kp > 0
+$pid_Ki > 0
+$pid_Kd > 0
+# ── pid tune — ZN P-only: Kp=0.5*Ku, Ki=Kd=0 ─────────────
+pid tune method=zn Ku=4 Tu=2 type=P
+$pid_Kp == 0.5 * 4
+$pid_Ki == 0
+$pid_Kd == 0
+# ── pid tune — ZN PI: Kp=0.45*Ku, Td=0 → Kd=0 ────────────
+pid tune method=zn Ku=4 Tu=2 type=PI
+$pid_Kp == 0.45 * 4
+$pid_Td == 0
+$pid_Kd == 0
+$pid_Ki > 0
+# PID mode gives higher Kp than P-only at same Ku/Tu
+pid tune method=zn Ku=4 Tu=2 type=PID
+$Kp_pid_zn = $pid_Kp
+pid tune method=zn Ku=4 Tu=2 type=P
+$Kp_p_zn = $pid_Kp
+$Kp_pid_zn > $Kp_p_zn
+# all gains positive and finite
+$pid_Kp > 0
+$pid_Kp < 1e6
+# ── pid tune — Ziegler-Nichols open-loop, PID ──────────────
+# K=1 L=0.5 tau=2: Kp=1.2*2/(1*0.5)=4.8, Ti=2*0.5=1, Td=0.5*0.5=0.25
+#                   Ki=Kp/Ti=4.8, Kd=Kp*Td=1.2
+pid tune method=znol K=1 L=0.5 tau=2 type=PID
+$pid_Kp == 1.2 * 2 / (1 * 0.5)
+$pid_Ti == 2 * 0.5
+$pid_Td == 0.5 * 0.5
+$pid_Ki == 4.8
+$pid_Kd == 4.8 * 0.25
+$pid_Kp > 0
+$pid_Ki > 0
+$pid_Kd > 0
+# ZNOL PI: Td=0 → Kd=0
+pid tune method=znol K=1 L=0.5 tau=2 type=PI
+$pid_Td == 0
+$pid_Kd == 0
+$pid_Ki > 0
+# ZNOL P-only: Ki=Kd=0
+pid tune method=znol K=1 L=0.5 tau=2 type=P
+$pid_Ki == 0
+$pid_Kd == 0
+$pid_Kp > 0
+# larger dead time L → lower Kp (more dead time = less aggressive gain)
+pid tune method=znol K=1 L=1.0 tau=2 type=PID
+$Kp_long_L = $pid_Kp
+pid tune method=znol K=1 L=0.5 tau=2 type=PID
+$Kp_short_L = $pid_Kp
+$Kp_short_L > $Kp_long_L
+# ── pid tune — Cohen-Coon, PID ─────────────────────────────
+# K=2 L=1 tau=5, r=L/tau=0.2 — verify signs and ordering
+pid tune method=cc K=2 L=1 tau=5 type=PID
+$pid_Kp > 0
+$pid_Ki > 0
+$pid_Kd > 0
+$pid_Ti > 0
+$pid_Td > 0
+# Ti > Td for well-behaved tuning
+$pid_Ti > $pid_Td
+# CC PI: Td=0 → Kd=0
+pid tune method=cc K=2 L=1 tau=5 type=PI
+$pid_Td == 0
+$pid_Kd == 0
+$pid_Ki > 0
+# CC P-only: Ki=Kd=0
+pid tune method=cc K=2 L=1 tau=5 type=P
+$pid_Ki == 0
+$pid_Kd == 0
+$pid_Kp > 0
+# smaller dead-time ratio r=L/tau → more aggressive Kp
+# r=0.1 (L=0.5,tau=5) vs r=0.4 (L=2,tau=5)
+pid tune method=cc K=1 L=0.5 tau=5 type=PID
+$Kp_small_r = $pid_Kp
+pid tune method=cc K=1 L=2 tau=5 type=PID
+$Kp_large_r = $pid_Kp
+$Kp_small_r > $Kp_large_r
+# higher plant gain K → lower controller Kp (1/K factor in CC formula)
+pid tune method=cc K=1 L=1 tau=5 type=PID
+$Kp_K1 = $pid_Kp
+pid tune method=cc K=4 L=1 tau=5 type=PID
+$Kp_K4 = $pid_Kp
+$Kp_K1 > $Kp_K4
+# ── pid reset — re-verify after all step activity ───────────
+pid reset
+$pid_integral == 0
+$pid_prev_err == 0
+# ── pid cross-domain: tune → simulate ──────────────────────
+# ZN tune then drive a simulation with the resulting gains
+pid tune method=zn Ku=3 Tu=1.5 type=PID
+pid sim Kp=$pid_Kp Ki=$pid_Ki Kd=$pid_Kd sp=1 pv0=0 dt=0.05 n=200 gain=1 tau=1
+$pid_pv > 0
+# ZNOL tune → sim: pv should approach setpoint
+pid tune method=znol K=1 L=0.2 tau=1 type=PID
+pid sim Kp=$pid_Kp Ki=$pid_Ki Kd=$pid_Kd sp=5 pv0=0 dt=0.05 n=300 gain=1 tau=1
+$pid_pv > 4
+# step with ZN-tuned gains stored in variables
+pid reset
+pid tune method=zn Ku=2 Tu=0.8 type=PID
+$step_Kp = $pid_Kp
+$step_Ki = $pid_Ki
+$step_Kd = $pid_Kd
+pid step Kp=$step_Kp Ki=$step_Ki Kd=$step_Kd sp=10 pv=0 dt=0.05
+$pid_out > 0
+$pid_error == 10
+# ═══════════════════════════════════════════════════════════
+# FINAL STATE DUMP
+# ═══════════════════════════════════════════════════════════
+vars
+mats
+exit
