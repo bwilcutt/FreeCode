@@ -1,0 +1,1 @@
+This repository contains the Onyxx CAN file system which is based on the FUSE system of Linux.  Using FUSE, this application creates a file system.  Because of undisciplined repository practices, this version of the CANFS is probably not applicable.
