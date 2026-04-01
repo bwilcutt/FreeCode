@@ -1,0 +1,1 @@
+"./mcp3202.obj" "./spiAPI.obj" "../mcp3202Driver.cmd" -l"libc.a" 

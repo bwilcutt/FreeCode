@@ -1,0 +1,18 @@
+
+**** Build of configuration Release for project PRU_SPIMCP ****
+
+/opt/ti/ccsv6/utils/bin/gmake -k all 
+Building file: ../mcp3202.c
+Invoking: PRU Compiler
+"/opt/ti/ccsv6/tools/compiler/ti-cgt-pru_2.1.2/bin/clpru" -v3 -O2 --include_path="/opt/ti/ccsv6/ccs_base/pru/include" --include_path="/home/bwilcutt/workspace/onyxx-drivers/PRU_workspace/PRU_SPIMCP" --include_path="/opt/ti/ccsv6/tools/compiler/ti-cgt-pru_2.1.2/include" --symdebug:none --define=am3359 --define=pru0 --diag_warning=225 --diag_wrap=off --display_error_number --hardware_mac=on --endian=little --preproc_with_compile --preproc_dependency="mcp3202.pp"  "../mcp3202.c"
+"../mcp3202.c", line 179: warning #112-D: statement is unreachable
+Finished building: ../mcp3202.c
+ 
+Building target: PRU_SPIMCP.out
+Invoking: PRU Linker
+"/opt/ti/ccsv6/tools/compiler/ti-cgt-pru_2.1.2/bin/clpru" -v3 -O2 --symdebug:none --define=am3359 --define=pru0 --diag_warning=225 --diag_wrap=off --display_error_number --hardware_mac=on --endian=little -z -m"PRU_SPIMCP.map" --stack_size=0x100 --heap_size=0x100 -i"/opt/ti/ccsv6/tools/compiler/ti-cgt-pru_2.1.2/lib" -i"/opt/ti/ccsv6/tools/compiler/ti-cgt-pru_2.1.2/include" --reread_libs --diag_wrap=off --display_error_number --warn_sections --xml_link_info="PRU_SPIMCP_linkInfo.xml" --rom_model -o "PRU_SPIMCP.out" "./mcp3202.obj" "./spiAPI.obj" "../mcp3202Driver.cmd"  -l"libc.a" 
+<Linking>
+Finished building target: PRU_SPIMCP.out
+ 
+
+**** Build Finished ****

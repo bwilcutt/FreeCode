@@ -1,0 +1,5 @@
+#
+# Makefile for the mcp3202 driver.
+#
+
+obj-$(CONFIG_UIO_MCP3202) := uio_mcp3202.o 

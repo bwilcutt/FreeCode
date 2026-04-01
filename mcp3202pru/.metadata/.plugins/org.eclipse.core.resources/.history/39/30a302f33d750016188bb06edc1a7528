@@ -1,0 +1,860 @@
+/***************************************************************************************
+ * File		: am335x_mcspi.h
+ * Program	: PRU MCP3202 Reader
+ * Author	: Bryan Wilcutt
+ *
+ * Description:
+ *
+ * Reads 12-bit ADC values from the Microchip MCP3202 A/D Convertor
+ ****************************************************************************************/
+
+#ifndef SPIAPI_H
+#define SPIAPI_H
+
+#define SPIREG(x)									(*((volatile uint32_t *)(x)))
+#define SPIREG(x)									(*((volatile uint16_t *)(x)))
+
+#define TRUE 										(1)
+#define FALSE 										(0)
+
+#define SPI_CH_NUM_0 								(0)
+#define SPI_CLKD_MASK								(0xF)
+
+#define SOC_SPI_0_REGS								(0x48030000)
+#define SOC_SPI_1_REGS								(0x481A0000)
+#define CM_PER_BASE		  							((volatile void *)(0x44e00000))
+#define CM_SPI_BASE       							((volatile void *)(0x481A0000))
+
+/*************************************************************************
+ * Registers Definition
+ *************************************************************************/
+  
+#define SPI_HL_REV									(0x0)
+#define SPI_HL_HWINFO								(0x4)
+#define SPI_HL_SYSCONFIG							(0x10)
+#define SPI_REVISION								(0x100)
+#define SPI_SYSCONFIG								(0x110)
+#define SPI_SYSSTATUS								(0x114)
+#define SPI_IRQSTATUS								(0x118)
+#define SPI_IRQENABLE								(0x11C)
+#define SPI_WAKEUPENABLE							(0x120)
+#define SPI_SYST									(0x124)
+#define SPI_MODULCTRL								(0x128)
+#define SPI_CHCONF(n)								(0x12C + (n * 0x14))
+#define SPI_CHSTAT(n)								(0x130 + (n * 0x14))
+#define SPI_CHCTRL(n)								(0x134 + (n * 0x14))
+#define SPI_TX(n)									(0x138 + (n * 0x14))
+#define SPI_RX(n)									(0x13C + (n * 0x14))
+#define SPI_XFERLEVEL								(0x17C)
+  
+ // SPI Revision
+
+#define SPI_REVISION_REV							(0x000000FF)
+#define SPI_REVISION_REV_SHIFT						(0x00000000)
+  
+// SPI Interrupt
+
+#define SPI_INT_ENABLE 								(1)
+#define SPI_INT_DISABLE 							(0)
+
+// SPI DMA
+
+#define SPI_DMA_ENABLE								(1)
+#define SPI_DMA_DISABLE								(0)
+
+// SPI Turbo
+
+#define SPI_TURBO_ENABLE							(1)
+#define SPI_TURBO_DISABLE							(0)
+
+// SPI Channel
+
+#define SPI_CHANNEL_ENABLE							(1)
+#define SPI_CHANNEL_DISABLE							(0)
+
+// SPI CS Line
+
+#define SPI_CS_ENABLE								(1)
+#define SPI_CS_DISABLE								(0)
+
+// SPI SYSCONFIG Register
+
+#define SPI_SYSCONFIG_AUTOIDLE						(0x00000001)
+#define SPI_SYSCONFIG_AUTOIDLE_SHIFT				(0x00000000)
+#define SPI_SYSCONFIG_AUTOIDLE_DISABLE				(0x0)
+#define SPI_SYSCONFIG_AUTOIDLE_ENABLE				(0x1)
+  
+#define SPI_SYSCONFIG_CLOCKACTIVITY					(0x00000300)
+#define SPI_SYSCONFIG_CLOCKACTIVITY_SHIFT			(0x00000008)
+#define SPI_SYSCONFIG_CLOCKACTIVITY_BOTH			(0x3)
+#define SPI_SYSCONFIG_CLOCKACTIVITY_FUNC			(0x2)
+#define SPI_SYSCONFIG_CLOCKACTIVITY_NONE			(0x0)
+#define SPI_SYSCONFIG_CLOCKACTIVITY_OCP				(0x1)
+  
+#define SPI_SYSCONFIG_ENAWAKEUP						(0x00000004)
+#define SPI_SYSCONFIG_ENAWAKEUP_SHIFT				(0x00000002)
+#define SPI_SYSCONFIG_ENAWAKEUP_DISABLE				(0x0)
+#define SPI_SYSCONFIG_ENAWAKEUP_ENABLE				(0x1)
+  
+#define SPI_SYSCONFIG_SIDLEMODE						(0x00000018)
+#define SPI_SYSCONFIG_SIDLEMODE_SHIFT				(0x00000003)
+#define SPI_SYSCONFIG_SIDLEMODE_FORCE				(0x0)
+#define SPI_SYSCONFIG_SIDLEMODE_NOIDLE				(0x1)
+#define SPI_SYSCONFIG_SIDLEMODE_SMART				(0x2)
+#define SPI_SYSCONFIG_SIDLEMODE_WAKEUP				(0x3)
+  
+#define SPI_SYSCONFIG_SOFTRESET						(0x00000002)
+#define SPI_SYSCONFIG_SOFTRESET_SHIFT				(0x00000001)
+#define SPI_SYSCONFIG_SOFTRESET_DONE				(0x0)
+#define SPI_SYSCONFIG_SOFTRESET_INITIATE			(0x1)
+#define SPI_SYSCONFIG_SOFTRESET_ONGOING				(0x1)
+
+// SPI SYSSTATUS Register
+
+#define SPI_SYSSTATUS_RESETDONE						(0x00000001)
+#define SPI_SYSSTATUS_RESETDONE_SHIFT				(0x00000000)
+#define SPI_SYSSTATUS_RESETDONE_COMPLETED			(0x1)
+#define SPI_SYSSTATUS_RESETDONE_ONGOING				(0x0)
+  
+// SPI IRQ Status from RX0..3 & TX0..3
+
+#define SPI_IRQSTATUS_EOW							(0x00020000)
+#define SPI_IRQSTATUS_EOW_SHIFT						(0x00000011)
+#define SPI_IRQSTATUS_EOW_EVNTPENDING				(0x1)
+#define SPI_IRQSTATUS_EOW_EVNTSTSRST				(0x1)
+#define SPI_IRQSTATUS_EOW_NOEFFECT					(0x0)
+#define SPI_IRQSTATUS_EOW_NOEVNT					(0x0)
+  
+#define SPI_IRQSTATUS_RX0_FULL						(0x00000004)
+#define SPI_IRQSTATUS_RX0_FULL_SHIFT				(0x00000002)
+#define SPI_IRQSTATUS_RX0_FULL_EVNTPENDING			(0x1)
+#define SPI_IRQSTATUS_RX0_FULL_EVNTSTSRST			(0x1)
+#define SPI_IRQSTATUS_RX0_FULL_NOEFFECT				(0x0)
+#define SPI_IRQSTATUS_RX0_FULL_NOEVNT				(0x0)
+  
+#define SPI_IRQSTATUS_RX0_OVERFLOW					(0x00000008)
+#define SPI_IRQSTATUS_RX0_OVERFLOW_SHIFT			(0x00000003)
+#define SPI_IRQSTATUS_RX0_OVERFLOW_EVNTPENDING		(0x1)
+#define SPI_IRQSTATUS_RX0_OVERFLOW_EVNTSTSRST		(0x1)
+#define SPI_IRQSTATUS_RX0_OVERFLOW_NOEFFECT			(0x0)
+#define SPI_IRQSTATUS_RX0_OVERFLOW_NOEVNT			(0x0)
+  
+#define SPI_IRQSTATUS_RX1_FULL						(0x00000040)
+#define SPI_IRQSTATUS_RX1_FULL_SHIFT				(0x00000006)
+#define SPI_IRQSTATUS_RX1_FULL_EVNTPENDING			(0x1)
+#define SPI_IRQSTATUS_RX1_FULL_EVNTSTSRST			(0x1)
+#define SPI_IRQSTATUS_RX1_FULL_NOEFFECT				(0x0)
+#define SPI_IRQSTATUS_RX1_FULL_NOEVNT				(0x0)
+  
+#define SPI_IRQSTATUS_RX2_FULL						(0x00000400)
+#define SPI_IRQSTATUS_RX2_FULL_SHIFT				(0x0000000A)
+#define SPI_IRQSTATUS_RX2_FULL_EVNTPENDING			(0x1)
+#define SPI_IRQSTATUS_RX2_FULL_EVNTSTSRST			(0x1)
+#define SPI_IRQSTATUS_RX2_FULL_NOEFFECT				(0x0)
+#define SPI_IRQSTATUS_RX2_FULL_NOEVNT				(0x0)
+  
+#define SPI_IRQSTATUS_RX3_FULL						(0x00004000)
+#define SPI_IRQSTATUS_RX3_FULL_SHIFT				(0x0000000E)
+#define SPI_IRQSTATUS_RX3_FULL_EVNTPENDING			(0x1)
+#define SPI_IRQSTATUS_RX3_FULL_EVNTSTSRST			(0x1)
+#define SPI_IRQSTATUS_RX3_FULL_NOEFFECT				(0x0)
+#define SPI_IRQSTATUS_RX3_FULL_NOEVNT				(0x0)
+  
+#define SPI_IRQSTATUS_TX0_EMPTY						(0x00000001)
+#define SPI_IRQSTATUS_TX0_EMPTY_SHIFT				(0x00000000)
+#define SPI_IRQSTATUS_TX0_EMPTY_EVNTPENDING			(0x1)
+#define SPI_IRQSTATUS_TX0_EMPTY_EVNTSTSRST			(0x1)
+#define SPI_IRQSTATUS_TX0_EMPTY_NOEFFECT			(0x0)
+#define SPI_IRQSTATUS_TX0_EMPTY_NOEVNT				(0x0)
+  
+#define SPI_IRQSTATUS_TX0_UNDERFLOW					(0x00000002)
+#define SPI_IRQSTATUS_TX0_UNDERFLOW_SHIFT			(0x00000001)
+#define SPI_IRQSTATUS_TX0_UNDERFLOW_EVNTPENDING		(0x1)
+#define SPI_IRQSTATUS_TX0_UNDERFLOW_EVNTSTSRST		(0x1)
+#define SPI_IRQSTATUS_TX0_UNDERFLOW_NOEFFECT		(0x0)
+#define SPI_IRQSTATUS_TX0_UNDERFLOW_NOEVNT			(0x0)
+  
+#define SPI_IRQSTATUS_TX1_EMPTY						(0x00000010)
+#define SPI_IRQSTATUS_TX1_EMPTY_SHIFT				(0x00000004)
+#define SPI_IRQSTATUS_TX1_EMPTY_EVNTPENDING			(0x1)
+#define SPI_IRQSTATUS_TX1_EMPTY_EVNTSTSRST			(0x1)
+#define SPI_IRQSTATUS_TX1_EMPTY_NOEFFECT			(0x0)
+#define SPI_IRQSTATUS_TX1_EMPTY_NOEVNT				(0x0)
+  
+#define SPI_IRQSTATUS_TX1_UNDERFLOW					(0x00000020)
+#define SPI_IRQSTATUS_TX1_UNDERFLOW_SHIFT			(0x00000005)
+#define SPI_IRQSTATUS_TX1_UNDERFLOW_EVNTPENDING		(0x1)
+#define SPI_IRQSTATUS_TX1_UNDERFLOW_EVNTSTSRST		(0x1)
+#define SPI_IRQSTATUS_TX1_UNDERFLOW_NOEFFECT		(0x0)
+#define SPI_IRQSTATUS_TX1_UNDERFLOW_NOEVNT			(0x0)
+  
+#define SPI_IRQSTATUS_TX2_EMPTY						(0x00000100)
+#define SPI_IRQSTATUS_TX2_EMPTY_SHIFT				(0x00000008)
+#define SPI_IRQSTATUS_TX2_EMPTY_EVNTPENDING			(0x1)
+#define SPI_IRQSTATUS_TX2_EMPTY_EVNTSTSRST			(0x1)
+#define SPI_IRQSTATUS_TX2_EMPTY_NOEFFECT			(0x0)
+#define SPI_IRQSTATUS_TX2_EMPTY_NOEVNT				(0x0)
+  
+#define SPI_IRQSTATUS_TX2_UNDERFLOW					(0x00000200)
+#define SPI_IRQSTATUS_TX2_UNDERFLOW_SHIFT			(0x00000009)
+#define SPI_IRQSTATUS_TX2_UNDERFLOW_EVNTPENDING		(0x1)
+#define SPI_IRQSTATUS_TX2_UNDERFLOW_EVNTSTSRST		(0x1)
+#define SPI_IRQSTATUS_TX2_UNDERFLOW_NOEFFECT		(0x0)
+#define SPI_IRQSTATUS_TX2_UNDERFLOW_NOEVNT			(0x0)
+  
+#define SPI_IRQSTATUS_TX3_EMPTY						(0x00001000)
+#define SPI_IRQSTATUS_TX3_EMPTY_SHIFT				(0x0000000C)
+#define SPI_IRQSTATUS_TX3_EMPTY_EVNTPENDING			(0x1)
+#define SPI_IRQSTATUS_TX3_EMPTY_EVNTSTSRST			(0x1)
+#define SPI_IRQSTATUS_TX3_EMPTY_NOEFFECT			(0x0)
+#define SPI_IRQSTATUS_TX3_EMPTY_NOEVNT				(0x0)
+  
+#define SPI_IRQSTATUS_TX3_UNDERFLOW					(0x00002000)
+#define SPI_IRQSTATUS_TX3_UNDERFLOW_SHIFT			(0x0000000D)
+#define SPI_IRQSTATUS_TX3_UNDERFLOW_EVNTPENDING		(0x1)
+#define SPI_IRQSTATUS_TX3_UNDERFLOW_EVNTSTSRST		(0x1)
+#define SPI_IRQSTATUS_TX3_UNDERFLOW_NOEFFECT		(0x0)
+#define SPI_IRQSTATUS_TX3_UNDERFLOW_NOEVNT			(0x0)
+  
+#define SPI_IRQSTATUS_WKS							(0x00010000)
+#define SPI_IRQSTATUS_WKS_SHIFT						(0x00000010)
+#define SPI_IRQSTATUS_WKS_EVNTPENDING				(0x1)
+#define SPI_IRQSTATUS_WKS_EVNTSTSRST				(0x1)
+#define SPI_IRQSTATUS_WKS_NOEFFECT					(0x0)
+#define SPI_IRQSTATUS_WKS_NOEVNT					(0x0)
+
+// SPI IRQ Settings for RX0..3 & TX0..3
+
+#define SPI_IRQENABLE_EOW_ENABLE					(0x00020000)
+#define SPI_IRQENABLE_EOW_ENABLE_SHIFT				(0x00000011)
+#define SPI_IRQENABLE_EOW_ENABLE_DISABLED			(0x0)
+#define SPI_IRQENABLE_EOW_ENABLE_ENABLED			(0x1)
+  
+#define SPI_IRQENABLE_RX0_FULL_ENABLE				(0x00000004)
+#define SPI_IRQENABLE_RX0_FULL_ENABLE_SHIFT			(0x00000002)
+#define SPI_IRQENABLE_RX0_FULL_ENABLE_DISABLED		(0x0)
+#define SPI_IRQENABLE_RX0_FULL_ENABLE_ENABLED		(0x1)
+  
+#define SPI_IRQENABLE_RX0_OVERFLOW_ENABLE			(0x00000008)
+#define SPI_IRQENABLE_RX0_OVERFLOW_ENABLE_SHIFT		(0x00000003)
+#define SPI_IRQENABLE_RX0_OVERFLOW_ENABLE_DISABLED	(0x0)
+#define SPI_IRQENABLE_RX0_OVERFLOW_ENABLE_ENABLED	(0x1)
+  
+#define SPI_IRQENABLE_RX1_FULL_ENABLE				(0x00000040)
+#define SPI_IRQENABLE_RX1_FULL_ENABLE_SHIFT			(0x00000006)
+#define SPI_IRQENABLE_RX1_FULL_ENABLE_DISABLED		(0x0)
+#define SPI_IRQENABLE_RX1_FULL_ENABLE_ENABLED		(0x1)
+  
+#define SPI_IRQENABLE_RX2_FULL_ENABLE				(0x00000400)
+#define SPI_IRQENABLE_RX2_FULL_ENABLE_SHIFT			(0x0000000A)
+#define SPI_IRQENABLE_RX2_FULL_ENABLE_DISABLED		(0x0)
+#define SPI_IRQENABLE_RX2_FULL_ENABLE_ENABLED		(0x1)
+  
+#define SPI_IRQENABLE_RX3_FULL_ENABLE				(0x00004000)
+#define SPI_IRQENABLE_RX3_FULL_ENABLE_SHIFT			(0x0000000E)
+#define SPI_IRQENABLE_RX3_FULL_ENABLE_DISABLED		(0x0)
+#define SPI_IRQENABLE_RX3_FULL_ENABLE_ENABLED		(0x1)
+  
+#define SPI_IRQENABLE_TX0_EMPTY_ENABLE				(0x00000001)
+#define SPI_IRQENABLE_TX0_EMPTY_ENABLE_SHIFT		(0x00000000)
+#define SPI_IRQENABLE_TX0_EMPTY_ENABLE_DISABED		(0x0)
+#define SPI_IRQENABLE_TX0_EMPTY_ENABLE_ENABLED		(0x1)
+  
+#define SPI_IRQENABLE_TX0_UNDERFLOW_ENABLE			(0x00000002)
+#define SPI_IRQENABLE_TX0_UNDERFLOW_ENABLE_SHIFT	(0x00000001)
+#define SPI_IRQENABLE_TX0_UNDERFLOW_ENABLE_DISABLED	(0x0)
+#define SPI_IRQENABLE_TX0_UNDERFLOW_ENABLE_ENABLED	(0x1)
+  
+#define SPI_IRQENABLE_TX1_EMPTY_ENABLE				(0x00000010)
+#define SPI_IRQENABLE_TX1_EMPTY_ENABLE_SHIFT		(0x00000004)
+#define SPI_IRQENABLE_TX1_EMPTY_ENABLE_DISABLED		(0x0)
+#define SPI_IRQENABLE_TX1_EMPTY_ENABLE_ENABLED		(0x1)
+  
+#define SPI_IRQENABLE_TX1_UNDERFLOW_ENABLE			(0x00000020)
+#define SPI_IRQENABLE_TX1_UNDERFLOW_ENABLE_SHIFT	(0x00000005)
+#define SPI_IRQENABLE_TX1_UNDERFLOW_ENABLE_DISABLED	(0x0)
+#define SPI_IRQENABLE_TX1_UNDERFLOW_ENABLE_ENABLED	(0x1)
+  
+#define SPI_IRQENABLE_TX2_EMPTY_ENABLE				(0x00000100)
+#define SPI_IRQENABLE_TX2_EMPTY_ENABLE_SHIFT		(0x00000008)
+#define SPI_IRQENABLE_TX2_EMPTY_ENABLE_DISABLED		(0x0)
+#define SPI_IRQENABLE_TX2_EMPTY_ENABLE_ENABLED		(0x1)
+  
+#define SPI_IRQENABLE_TX2_UNDERFLOW_ENABLE			(0x00000200)
+#define SPI_IRQENABLE_TX2_UNDERFLOW_ENABLE_SHIFT	(0x00000009)
+#define SPI_IRQENABLE_TX2_UNDERFLOW_ENABLE_DISABLED	(0x0)
+#define SPI_IRQENABLE_TX2_UNDERFLOW_ENABLE_ENABLED	(0x1)
+  
+#define SPI_IRQENABLE_TX3_EMPTY_ENABLE				(0x00001000)
+#define SPI_IRQENABLE_TX3_EMPTY_ENABLE_SHIFT		(0x0000000C)
+#define SPI_IRQENABLE_TX3_EMPTY_ENABLE_DISABLED		(0x0)
+#define SPI_IRQENABLE_TX3_EMPTY_ENABLE_ENABLED		(0x1)
+  
+#define SPI_IRQENABLE_TX3_UNDERFLOW_ENABLE			(0x00002000)
+#define SPI_IRQENABLE_TX3_UNDERFLOW_ENABLE_SHIFT	(0x0000000D)
+#define SPI_IRQENABLE_TX3_UNDERFLOW_ENABLE_DISABLED	(0x0)
+#define SPI_IRQENABLE_TX3_UNDERFLOW_ENABLE_ENABLED	(0x1)
+  
+#define SPI_IRQENABLE_WKE							(0x00010000)
+#define SPI_IRQENABLE_WKE_SHIFT						(0x00000010)
+#define SPI_IRQENABLE_WKE_DISABLED					(0x0)
+#define SPI_IRQENABLE_WKE_ENABLED					(0x1)
+  
+// SPI Wakeup Enable Setting
+
+#define SPI_WAKEUPENABLE_WKEN						(0x00000001)
+#define SPI_WAKEUPENABLE_WKEN_SHIFT					(0x00000000)
+#define SPI_WAKEUPENABLE_WKEN_NOWAKEUP				(0x0)
+#define SPI_WAKEUPENABLE_WKEN_WAKEUP				(0x1)
+
+// SPI SYST Register
+
+#define SPI_SYST_SPICLK								(0x00000040)
+#define SPI_SYST_SPICLK_SHIFT						(0x00000006)
+  
+#define SPI_SYST_SPIDATDIR0							(0x00000100)
+#define SPI_SYST_SPIDATDIR0_SHIFT					(0x00000008)
+#define SPI_SYST_SPIDATDIR0_IN						(0x1)
+#define SPI_SYST_SPIDATDIR0_OUT						(0x0)
+  
+#define SPI_SYST_SPIDATDIR1							(0x00000200)
+#define SPI_SYST_SPIDATDIR1_SHIFT					(0x00000009)
+#define SPI_SYST_SPIDATDIR1_IN						(0x1)
+#define SPI_SYST_SPIDATDIR1_OUT						(0x0)
+  
+#define SPI_SYST_SPIDAT_0							(0x00000010)
+#define SPI_SYST_SPIDAT_0_SHIFT						(0x00000004)
+  
+#define SPI_SYST_SPIDAT_1							(0x00000020)
+#define SPI_SYST_SPIDAT_1_SHIFT						(0x00000005)
+  
+#define SPI_D0_OUT_D1_IN        					(SPI_SYST_SPIDATDIR1)
+#define SPI_D1_OUT_D0_IN       						(SPI_SYST_SPIDATDIR0)
+
+#define SPI_DAT1_IN                 				(SPI_SYST_SPIDATDIR1)
+#define SPI_DAT0_IN                 				(SPI_SYST_SPIDATDIR0)
+#define SPI_DAT1_OUT                				(SPI_SYST_SPIDATDIR1_OUT)
+#define SPI_DAT0_OUT                				(SPI_SYST_SPIDATDIR0_OUT)
+
+#define SPI_SYST_SPIENDIR							(0x00000400)
+#define SPI_SYST_SPIENDIR_SHIFT						(0x0000000A)
+#define SPI_SYST_SPIENDIR_IN						(0x1)
+#define SPI_SYST_SPIENDIR_OUT						(0x0)
+  
+#define SPI_SYST_SPIEN_0							(0x00000001)
+#define SPI_SYST_SPIEN_0_SHIFT						(0x00000000)
+  
+#define SPI_SYST_SPIEN_1							(0x00000002)
+#define SPI_SYST_SPIEN_1_SHIFT						(0x00000001)
+  
+#define SPI_SYST_SPIEN_2							(0x00000004)
+#define SPI_SYST_SPIEN_2_SHIFT						(0x00000002)
+  
+#define SPI_SYST_SPIEN_3							(0x00000008)
+#define SPI_SYST_SPIEN_3_SHIFT						(0x00000003)
+  
+#define SPI_SYST_SSB								(0x00000800)
+#define SPI_SYST_SSB_SHIFT							(0x0000000B)
+#define SPI_SYST_SSB_OFF							(0x0)
+#define SPI_SYST_SSB_SETALL							(0x1)
+  
+#define SPI_SYST_WAKD								(0x00000080)
+#define SPI_SYST_WAKD_SHIFT							(0x00000007)
+#define SPI_SYST_WAKD_DRIVENHIGH					(0x1 << SPI_SYST_WAKD_SHIFT)
+#define SPI_SYST_WAKD_DRIVENLOW						(0x0 << SPI_SYST_WAKD_SHIFT)
+
+// SPI MODULCTRL Register
+
+#define SPI_MODULCTRL_FDAA							(0x00000100)
+#define SPI_MODULCTRL_FDAA_SHIFT					(0x00000008)
+#define SPI_MODULCTRL_FDAA_NOSHADOWREG				(0x0 << SPI_MODULCTRL_FDAA_SHIFT)
+#define SPI_MODULCTRL_FDAA_SHADOWREGEN				(0x1 << SPI_MODULCTRL_FDAA_SHIFT)
+  
+#define SPI_MODULCTRL_INITDLY						(0x00000070)
+#define SPI_MODULCTRL_INITDLY_SHIFT					(0x00000004)
+#define SPI_MODULCTRL_INITDLY_16CLKDLY				(0x3 << SPI_MODULCTRL_INITDLY_SHIFT)
+#define SPI_MODULCTRL_INITDLY_32CLKDLY				(0x4 << SPI_MODULCTRL_INITDLY_SHIFT)
+#define SPI_MODULCTRL_INITDLY_4CLKDLY				(0x1 << SPI_MODULCTRL_INITDLY_SHIFT)
+#define SPI_MODULCTRL_INITDLY_8CLKDLY				(0x2 << SPI_MODULCTRL_INITDLY_SHIFT)
+#define SPI_MODULCTRL_INITDLY_NODELAY				(0x0 << SPI_MODULCTRL_INITDLY_SHIFT)
+  
+#define SPI_MODULCTRL_MOA							(0x00000080)
+#define SPI_MODULCTRL_MOA_SHIFT						(0x00000007)
+#define SPI_MODULCTRL_MOA_DISABLED					(0x0 << SPI_MODULCTRL_MOA_SHIFT)
+#define SPI_MODULCTRL_MOA_ENABLED					(0x1 << SPI_MODULCTRL_MOA_SHIFT)
+  
+#define SPI_MODULCTRL_MS							(0x00000004)
+#define SPI_MODULCTRL_MS_SHIFT						(0x00000002)
+#define SPI_MODULCTRL_MS_MASTER						(0x0 << SPI_MODULCTRL_MS_SHIFT)
+#define SPI_MODULCTRL_MS_SLAVE						(0x1 << SPI_MODULCTRL_MS_SHIFT)
+  
+#define SPI_MODULCTRL_PIN34							(0x00000002)
+#define SPI_MODULCTRL_PIN34_SHIFT					(0x00000001)
+#define SPI_MODULCTRL_PIN34_3PINMODE				(0x1 << SPI_MODULCTRL_PIN34_SHIFT)
+#define SPI_MODULCTRL_PIN34_4PINMODE				(0x0 << SPI_MODULCTRL_PIN34_SHIFT)
+  
+#define SPI_MODULCTRL_SINGLE						(0x00000001)
+#define SPI_MODULCTRL_SINGLE_SHIFT					(0x00000000)
+#define SPI_MODULCTRL_SINGLE_MULTI					(0x0 << SPI_MODULCTRL_SINGLE_SHIFT)
+#define SPI_MODULCTRL_SINGLE_SINGLE					(0x1 << SPI_MODULCTRL_SINGLE_SHIFT)
+  
+#define SPI_MODULCTRL_SYSTEM_TEST					(0x00000008)
+#define SPI_MODULCTRL_SYSTEM_TEST_SHIFT				(0x00000003)
+#define SPI_MODULCTRL_SYSTEM_TEST_OFF				(0x0 << SPI_MODULCTRL_SYSTEM_TEST_SHIFT)
+#define SPI_MODULCTRL_SYSTEM_TEST_ON				(0x1 << SPI_MODULCTRL_SYSTEM_TEST_SHIFT)
+  
+// Channel{0..3} CONF Register
+
+#define SPI_CHCONF_CLKD								(0x0000003C)
+#define SPI_CHCONF_CLKD_SHIFT						(0x00000002)
+#define SPI_CHCONF_CLKD_DIVBY1						(0x0)
+#define SPI_CHCONF_CLKD_DIVBY128					(0x7)
+#define SPI_CHCONF_CLKD_DIVBY16						(0x4)
+#define SPI_CHCONF_CLKD_DIVBY16K					(0xE)
+#define SPI_CHCONF_CLKD_DIVBY1K						(0xA)
+#define SPI_CHCONF_CLKD_DIVBY2						(0x1)
+#define SPI_CHCONF_CLKD_DIVBY256					(0x8)
+#define SPI_CHCONF_CLKD_DIVBY2K						(0xB)
+#define SPI_CHCONF_CLKD_DIVBY32						(0x5)
+#define SPI_CHCONF_CLKD_DIVBY32K					(0xF)
+#define SPI_CHCONF_CLKD_DIVBY4						(0x2)
+#define SPI_CHCONF_CLKD_DIVBY4K						(0xC)
+#define SPI_CHCONF_CLKD_DIVBY512					(0x9)
+#define SPI_CHCONF_CLKD_DIVBY64						(0x6)
+#define SPI_CHCONF_CLKD_DIVBY8						(0x3)
+#define SPI_CHCONF_CLKD_DIVBY8K						(0xD)
+  
+#define SPI_CHCONF_CLKG								(0x20000000)
+#define SPI_CHCONF_CLKG_SHIFT						(0x0000001D)
+#define SPI_CHCONF_CLKG_ONECYCLE					(0x1 << SPI_CHCONF_CLKG_SHIFT)
+#define SPI_CHCONF_CLKG_POWERTWO					(0x0 << SPI_CHCONF_CLKG_SHIFT)
+  
+#define SPI_CHCONF_DMAR								(0x00008000)
+#define SPI_CHCONF_DMAR_SHIFT						(0x0000000F)
+#define SPI_CHCONF_DMAR_DISABLED					(0x0 << SPI_CHCONF_DMAR_SHIFT)
+#define SPI_CHCONF_DMAR_ENABLED						(0x1 << SPI_CHCONF_DMAR_SHIFT)
+  
+#define SPI_CHCONF_DMAW								(0x00004000)
+#define SPI_CHCONF_DMAW_SHIFT						(0x0000000E)
+#define SPI_CHCONF_DMAW_DISABLED					(0x0 << SPI_CHCONF_DMAW_SHIFT)
+#define SPI_CHCONF_DMAW_ENABLED						(0x1 << SPI_CHCONF_DMAW_SHIFT)
+  
+#define SPI_CHCONF_DPE0								(0x00010000)
+#define SPI_CHCONF_DPE0_SHIFT						(0x00000010)
+#define SPI_CHCONF_DPE0_DISABLED					(0x1 << SPI_CHCONF_DPE0_SHIFT)
+#define SPI_CHCONF_DPE0_ENABLED						(0x0 << SPI_CHCONF_DPE0_SHIFT)
+  
+#define SPI_CHCONF_DPE1								(0x00020000)
+#define SPI_CHCONF_DPE1_SHIFT						(0x00000011)
+#define SPI_CHCONF_DPE1_DISABLED					(0x1 << SPI_CHCONF_DPE1_SHIFT)
+#define SPI_CHCONF_DPE1_ENABLED						(0x0 << SPI_CHCONF_DPE1_SHIFT)
+  
+#define SPI_CHCONF_EPOL								(0x00000040)
+#define SPI_CHCONF_EPOL_SHIFT						(0x00000006)
+#define SPI_CHCONF_EPOL_ACTIVEHIGH					(0x0 << SPI_CHCONF_EPOL_SHIFT)
+#define SPI_CHCONF_EPOL_ACTIVELOW					(0x1 << SPI_CHCONF_EPOL_SHIFT)
+  
+#define SPI_CHCONF_FFER								(0x10000000)
+#define SPI_CHCONF_FFER_SHIFT						(0x0000001C)
+#define SPI_CHCONF_FFER_FFDISABLED					(0x0 << SPI_CHCONF_FFER_SHIFT)
+#define SPI_CHCONF_FFER_FFENABLED					(0x1 << SPI_CHCONF_FFER_SHIFT)
+  
+#define SPI_CHCONF_FFEW								(0x08000000)
+#define SPI_CHCONF_FFEW_SHIFT						(0x0000001B)
+#define SPI_CHCONF_FFEW_FFDISABLED					(0x0 << SPI_CHCONF_FFEW_SHIFT)
+#define SPI_CHCONF_FFEW_FFENABLED					(0x1 << SPI_CHCONF_FFEW_SHIFT)
+  
+#define SPI_CHCONF_FORCE							(0x00100000)
+#define SPI_CHCONF_FORCE_SHIFT						(0x00000014)
+#define SPI_CHCONF_FORCE_ASSERT						(0x1 << SPI_CHCONF_FORCE_SHIFT)
+#define SPI_CHCONF_FORCE_DEASSERT					(0x0 << SPI_CHCONF_FORCE_SHIFT)
+  
+#define SPI_CHCONF_IS								(0x00040000)
+#define SPI_CHCONF_IS_SHIFT							(0x00000012)
+#define SPI_CHCONF_IS_LINE0							(0x0 << SPI_CHCONF_IS_SHIFT)
+#define SPI_CHCONF_IS_LINE1							(0x1 << SPI_CHCONF_IS_SHIFT)
+  
+#define SPI_CHCONF_PHA								(0x00000001)
+#define SPI_CHCONF_PHA_SHIFT						(0x00000000)
+#define SPI_CHCONF_PHA_EVEN							(0x1 << SPI_CHCONF_PHA_SHIFT)
+#define SPI_CHCONF_PHA_ODD							(0x0 << SPI_CHCONF_PHA_SHIFT)
+  
+#define SPI_CHCONF_POL								(0x00000002)
+#define SPI_CHCONF_POL_SHIFT						(0x00000001)
+#define SPI_CHCONF_POL_ACTIVEHIGH					(0x0 << SPI_CHCONF_POL_SHIFT)
+#define SPI_CHCONF_POL_ACTIVELOW					(0x1 << SPI_CHCONF_POL_SHIFT)
+  
+#define SPI_CHCONF_SBE								(0x00800000)
+#define SPI_CHCONF_SBE_SHIFT						(0x00000017)
+#define SPI_CHCONF_SBE_DISABLED						(0x0 << SPI_CHCONF_SBE_SHIFT)
+#define SPI_CHCONF_SBE_ENABLED						(0x1 << SPI_CHCONF_SBE_SHIFT)
+  
+#define SPI_CHCONF_SBPOL							(0x01000000)
+#define SPI_CHCONF_SBPOL_SHIFT						(0x00000018)
+#define SPI_CHCONF_SBPOL_HIGHLEVEL					(0x1 << SPI_CHCONF_SBPOL_SHIFT)
+#define SPI_CHCONF_SBPOL_LOWLEVEL					(0x0 << SPI_CHCONF_SBPOL_SHIFT)
+  
+#define SPI_CHCONF_SPIENSLV							(0x00600000)
+#define SPI_CHCONF_SPIENSLV_SHIFT					(0x00000015)
+#define SPI_CHCONF_SPIENSLV_SPIEN0					(0x0 << SPI_CHCONF_SPIENSLV_SHIFT)
+#define SPI_CHCONF_SPIENSLV_SPIEN1					(0x1 << SPI_CHCONF_SPIENSLV_SHIFT)
+#define SPI_CHCONF_SPIENSLV_SPIEN2					(0x2 << SPI_CHCONF_SPIENSLV_SHIFT)
+#define SPI_CHCONF_SPIENSLV_SPIEN3					(0x3 << SPI_CHCONF_SPIENSLV_SHIFT)
+  
+#define SPI_CHCONF_TCS0								(0x06000000)
+#define SPI_CHCONF_TCS0_SHIFT						(0x00000019)
+#define SPI_CHCONF_TCS0_0P5							(0x0)
+#define SPI_CHCONF_TCS0_1P5							(0x1)
+#define SPI_CHCONF_TCS0_2P5							(0x2)
+#define SPI_CHCONF_TCS0_3P5							(0x3)
+  
+#define SPI_CHCONF_TRM								(0x00003000)
+#define SPI_CHCONF_TRM_SHIFT						(0x0000000C)
+#define SPI_CHCONF_TRM_RXONLY						(0x1 << SPI_CHCONF_TRM_SHIFT)
+#define SPI_CHCONF_TRM_TXONLY						(0x2 << SPI_CHCONF_TRM_SHIFT)
+#define SPI_CHCONF_TRM_TXRX							(0x0 << SPI_CHCONF_TRM_SHIFT)
+  
+#define SPI_CHCONF_TURBO							(0x00080000)
+#define SPI_CHCONF_TURBO_SHIFT						(0x00000013)
+#define SPI_CHCONF_TURBO_DISABLED					(0x0 << SPI_CHCONF_TURBO_SHIFT)
+#define SPI_CHCONF_TURBO_ENABLED					(0x1 << SPI_CHCONF_TURBO_SHIFT)
+  
+#define SPI_CHCONF_WL								(0x00000F80)
+#define SPI_CHCONF_WL_SHIFT							(0x00000007)
+#define SPI_CHCONF_WL_10BITS						(0x9)
+#define SPI_CHCONF_WL_11BITS						(0xA)
+#define SPI_CHCONF_WL_12BITS						(0xB)
+#define SPI_CHCONF_WL_13BITS						(0xC)
+#define SPI_CHCONF_WL_14BITS						(0xD)
+#define SPI_CHCONF_WL_15BITS						(0xE)
+#define SPI_CHCONF_WL_16BITS						(0xF)
+#define SPI_CHCONF_WL_17BITS						(0x10)
+#define SPI_CHCONF_WL_18BITS						(0x11)
+#define SPI_CHCONF_WL_19BITS						(0x12)
+#define SPI_CHCONF_WL_20BITS						(0x13)
+#define SPI_CHCONF_WL_21BITS						(0x14)
+#define SPI_CHCONF_WL_22BITS						(0x15)
+#define SPI_CHCONF_WL_23BITS						(0x16)
+#define SPI_CHCONF_WL_24BITS						(0x17)
+#define SPI_CHCONF_WL_25BITS						(0x18)
+#define SPI_CHCONF_WL_26BITS						(0x19)
+#define SPI_CHCONF_WL_27BITS						(0x1A)
+#define SPI_CHCONF_WL_28BITS						(0x1B)
+#define SPI_CHCONF_WL_29BITS						(0x1C)
+#define SPI_CHCONF_WL_30BITS						(0x1D)
+#define SPI_CHCONF_WL_31BITS						(0x1E)
+#define SPI_CHCONF_WL_32BITS						(0x1F)
+#define SPI_CHCONF_WL_4BITS							(0x3)
+#define SPI_CHCONF_WL_5BITS							(0x4)
+#define SPI_CHCONF_WL_6BITS							(0x5)
+#define SPI_CHCONF_WL_7BITS							(0x6)
+#define SPI_CHCONF_WL_8BITS							(0x7)
+#define SPI_CHCONF_WL_9BITS							(0x8)
+
+// Channel{0..3} STAT Register
+
+#define SPI_CHSTAT_EOT								(0x00000004)
+#define SPI_CHSTAT_EOT_SHIFT						(0x00000002)
+#define SPI_CHSTAT_EOT_COMPLETED					(0x1 << SPI_CHSTAT_EOT_SHIFT)
+#define SPI_CHSTAT_EOT_INPROGRESS					(0x0 << SPI_CHSTAT_EOT_SHIFT)
+  
+#define SPI_CHSTAT_RXFFE							(0x00000020)
+#define SPI_CHSTAT_RXFFE_SHIFT						(0x00000005)
+#define SPI_CHSTAT_FIFO_EMPTY						(SPI_CHSTAT_RXFFE &)
+#define SPI_CHSTAT_RXFFE_EMPTY						(0x1 << SPI_CHSTAT_RXFFE_SHIFT)
+#define SPI_CHSTAT_RXFFE_NOTEMPTY					(0x0 << SPI_CHSTAT_RXFFE_SHIFT)
+  
+#define SPI_CHSTAT_RXFFF							(0x00000040)
+#define SPI_CHSTAT_RXFFF_SHIFT						(0x00000006)
+#define SPI_CHSTAT_RXFFF_FULL						(0x1 << SPI_CHSTAT_RXFFF_SHIFT)
+#define SPI_CHSTAT_RXFFF_NOTFULL					(0x0 << SPI_CHSTAT_RXFFF_SHIFT)
+  
+#define SPI_CHSTAT_RXS								(0x00000001)
+#define SPI_CHSTAT_RXS_SHIFT						(0x00000000)
+#define SPI_CHSTAT_RXS_EMPTY						(0x0 << SPI_CHSTAT_RXS_SHIFT)
+#define SPI_CHSTAT_RXS_FULL							(0x1 << SPI_CHSTAT_RXS_SHIFT)
+  
+#define SPI_CHSTAT_TXFFE							(0x00000008)
+#define SPI_CHSTAT_TXFFE_SHIFT						(0x00000003)
+#define SPI_CHSTAT_TXFFE_EMPTY						(0x1 << SPI_CHSTAT_TXFFE_SHIFT)
+#define SPI_CHSTAT_TXFFE_NOTEMPTY					(0x0 << SPI_CHSTAT_TXFFE_SHIFT)
+  
+#define SPI_CHSTAT_TXFFF							(0x00000010)
+#define SPI_CHSTAT_TXFFF_SHIFT						(0x00000004)
+#define SPI_CHSTAT_TXFFF_FULL						(0x1 << SPI_CHSTAT_TXFFE_SHIFT)
+#define SPI_CHSTAT_TXFFF_NOTFULL					(0x0 << SPI_CHSTAT_TXFFE_SHIFT)
+  
+#define SPI_CHSTAT_TXS								(0x00000002)
+#define SPI_CHSTAT_TXS_SHIFT						(0x00000001)
+#define SPI_CHSTAT_TXS_EMPTY						(0x1 << TX_CHSTAT_TXS_SHIFT)
+#define SPI_CHSTAT_TXS_FULL							(0x0 << TX_CHSTAT_TXS_SHIFT)
+  
+  
+// Channel{0..3} CTRL Register
+
+#define SPI_CHCTRL_EN								(0x00000001)
+#define SPI_CHCTRL_EN_SHIFT							(0x00000000)
+#define SPI_CHCTRL_EN_ACTIVE						(0x1)
+#define SPI_CHCTRL_EN_INACTIVE						(0x0)
+  
+#define SPI_CHCTRL_EXTCLK							(0x0000FF00)
+#define SPI_CHCTRL_EXTCLK_SHIFT						(0x00000008)
+#define SPI_CHCTRL_EXTCLK_EXT4080					(0xFF)
+#define SPI_CHCTRL_EXTCLK_EXTONE					(0x1)
+#define SPI_CHCTRL_EXTCLK_EXTZERO					(0x0)
+  
+// SPI RX/TX Setting
+
+#define SPI_TX_TDATA								(0xFFFFFFFF)
+#define SPI_TX_TDATA_SHIFT							(0x00000000)
+#define SPI_RX_RDATA								(0xFFFFFFFF)
+#define SPI_RX_RDATA_SHIFT							(0x00000000)
+  
+// SPI XFERLEVEL Settings
+
+#define SPI_XFERLEVEL_AEL							(0x000000FF)
+#define SPI_XFERLEVEL_AEL_SHIFT						(0x00000000)
+#define SPI_XFERLEVEL_AEL_1BYTE						(0x0)
+#define SPI_XFERLEVEL_AEL_255BYTES					(0xFE)
+#define SPI_XFERLEVEL_AEL_256BYTES					(0xFF)
+#define SPI_XFERLEVEL_AEL_2BYTES					(0x1)
+  
+#define SPI_XFERLEVEL_AFL							(0x0000FF00)
+#define SPI_XFERLEVEL_AFL_SHIFT						(0x00000008)
+#define SPI_XFERLEVEL_AFL_1BYTE						(0x0)
+#define SPI_XFERLEVEL_AFL_255BYTES					(0xFE)
+#define SPI_XFERLEVEL_AFL_256BYTES					(0xFF)
+#define SPI_XFERLEVEL_AFL_2BYTES					(0x1)
+  
+#define SPI_XFERLEVEL_WCNT							(0xFFFF0000)
+#define SPI_XFERLEVEL_WCNT_SHIFT					(0x00000010)
+#define SPI_XFERLEVEL_WCNT_1WORD					(0x1)
+#define SPI_XFERLEVEL_WCNT_65534WORD				(0xFFFE)
+#define SPI_XFERLEVEL_WCNT_65535WORD				(0xFFFF)
+#define SPI_XFERLEVEL_WCNT_DISABLE					(0x0)
+ 
+
+// SPI Channels
+
+#define SPI_CHANNEL_0   							(0)
+#define SPI_CHANNEL_1               				(1)
+#define SPI_CHANNEL_2                				(2)
+#define SPI_CHANNEL_3                				(3)
+#define SPI_MAX_CH                   				(4)
+
+// Clock Graniularity
+
+#define SPI_CLK_GRAN_2_PWR_N         				(0)
+#define SPI_CLK_GRAN_1               				(1)
+
+// SPI Clock Modes
+
+#define SPI_CLK_MODE_0								((SPI_CHCONF_POL_ACTIVEHIGH << SPI_CHCONF_POL_SHIFT) | SPI_CHCONF_PHA_ODD)
+#define SPI_CLK_MODE_1              				((SPI_CHCONF_POL_ACTIVEHIGH << SPI_CHCONF_POL_SHIFT) | SPI_CHCONF_PHA_EVEN)
+#define SPI_CLK_MODE_2              				((SPI_CHCONF_POL_ACTIVELOW << SPI_CHCONF_POL_SHIFT) | SPI_CHCONF_PHA_ODD)
+#define SPI_CLK_MODE_3              				((SPI_CHCONF_POL_ACTIVELOW << SPI_CHCONF_POL_SHIFT) | SPI_CHCONF_PHA_EVEN)
+
+// Channel Modes
+
+#define SPI_SINGLE_CH               				(SPI_MODULCTRL_SINGLE_SINGLE)
+#define SPI_MULTI_CH                				(SPI_MODULCTRL_SINGLE_MULTI)
+  
+// Chip Select Modes
+
+#define SPI_CS_TCS_0PNT5_CLK        				(SPI_CHCONF_TCS0_0P5 << SPI_CHCONF_TCS0_SHIFT)
+#define SPI_CS_TCS_1PNT5_CLK       					(SPI_CHCONF_TCS0_1P5 << SPI_CHCONF_TCS0_SHIFT)
+#define SPI_CS_TCS_2PNT5_CLK        				(SPI_CHCONF_TCS0_2P5 << SPI_CHCONF_TCS0_SHIFT)
+#define SPI_CS_TCS_3PNT5_CLK        				(SPI_CHCONF_TCS0_3P5 << SPI_CHCONF_TCS0_SHIFT)
+
+// Polarity Modes
+
+#define SPI_START_BIT_POL_LOW       				(SPI_CHCONF_SBPOL_LOWLEVEL)
+#define SPI_START_BIT_POL_HIGH      				(SPI_CHCONF_SBPOL)
+
+// Dataline Communication Modes
+
+#define SPI_DATA_LINE_COMM_MODE_0   				((SPI_CHCONF_IS_LINE0) | (SPI_CHCONF_DPE1_ENABLED) | (SPI_CHCONF_DPE0_ENABLED))
+#define SPI_DATA_LINE_COMM_MODE_1   				((SPI_CHCONF_IS_LINE0)| (SPI_CHCONF_DPE1_ENABLED)| (SPI_CHCONF_DPE0_DISABLED << SPI_CHCONF_DPE0_SHIFT))
+#define SPI_DATA_LINE_COMM_MODE_2   				((SPI_CHCONF_IS_LINE0) | (SPI_CHCONF_DPE1_DISABLED << SPI_CHCONF_DPE1_SHIFT) | (SPI_CHCONF_DPE0_ENABLED))
+#define SPI_DATA_LINE_COMM_MODE_3   				((SPI_CHCONF_IS_LINE0) | (SPI_CHCONF_DPE1_DISABLED << SPI_CHCONF_DPE1_SHIFT) | (SPI_CHCONF_DPE0_DISABLED << SPI_CHCONF_DPE0_SHIFT))
+#define SPI_DATA_LINE_COMM_MODE_4   				((SPI_CHCONF_IS_LINE1 << SPI_CHCONF_IS_SHIFT) | (SPI_CHCONF_DPE1_ENABLED) | (SPI_CHCONF_DPE0_ENABLED))
+#define SPI_DATA_LINE_COMM_MODE_5   				((SPI_CHCONF_IS_LINE1 << SPI_CHCONF_IS_SHIFT) | (SPI_CHCONF_DPE1_ENABLED) | (SPI_CHCONF_DPE0_DISABLED << SPI_CHCONF_DPE0_SHIFT))
+#define SPI_DATA_LINE_COMM_MODE_6  					((SPI_CHCONF_IS_LINE1 << SPI_CHCONF_IS_SHIFT) | (SPI_CHCONF_DPE1_DISABLED << SPI_CHCONF_DPE1_SHIFT) | (SPI_CHCONF_DPE0_ENABLED))
+#define SPI_DATA_LINE_COMM_MODE_7   				((SPI_CHCONF_IS_LINE1 << SPI_CHCONF_IS_SHIFT) | (SPI_CHCONF_DPE1_DISABLED << SPI_CHCONF_DPE1_SHIFT) | (SPI_CHCONF_DPE0_DISABLED << SPI_CHCONF_DPE0_SHIFT))
+
+// System Test
+
+#define SPI_SYSTEST_ENABLE          				(SPI_MODULCTRL_SYSTEM_TEST)
+#define SPI_SYSTEST_DISABLE         				(SPI_MODULCTRL_SYSTEM_TEST_OFF)
+
+// SPI Delay Settings
+
+#define SPI_INITDLY_0               				(SPI_MODULCTRL_INITDLY_NODELAY)
+#define SPI_INITDLY_4               				(SPI_MODULCTRL_INITDLY_4CLKDLY << SPI_MODULCTRL_INITDLY_SHIFT)
+#define SPI_INITDLY_8              					(SPI_MODULCTRL_INITDLY_8CLKDLY << SPI_MODULCTRL_INITDLY_SHIFT)
+#define SPI_INITDLY_16              				(SPI_MODULCTRL_INITDLY_16CLKDLY << SPI_MODULCTRL_INITDLY_SHIFT)
+#define SPI_INITDLY_32              				(SPI_MODULCTRL_INITDLY_32CLKDLY << SPI_MODULCTRL_INITDLY_SHIFT)
+
+// SPI RX/TX Modes
+
+#define SPI_TX_RX_MODE              				(SPI_CHCONF_TRM_TXRX << SPI_CHCONF_TRM_SHIFT)
+#define SPI_RX_ONLY_MODE            				(SPI_CHCONF_TRM_RXONLY << SPI_CHCONF_TRM_SHIFT)
+#define SPI_TX_ONLY_MODE            				(SPI_CHCONF_TRM_TXONLY << SPI_CHCONF_TRM_SHIFT)
+
+// MACROS: Enable, Disable, Clear status of SPI Interrupts
+
+#define SPI_INT_TX_EMPTY(chan)      				(1 << ((chan) * 4))
+#define SPI_INT_TX_UNDERFLOW(chan)  				(2 << ((chan) * 4))
+#define SPI_INT_RX_FULL(chan)       				(4 << ((chan) * 4))
+#define SPI_INT_RX0_OVERFLOW        				(8)
+#define SPI_INT_EOWKE               				(SPI_IRQENABLE_EOW_ENABLE)
+
+// SPI FIFO Status Register Checks
+
+#define SPI_CH_STAT_RXS_FULL        				(SPI_CHSTAT_RXS)
+#define SPI_CH_STAT_TXS_EMPTY       				(SPI_CHSTAT_TXS)
+#define SPI_CH_STAT_EOT             				(SPI_CHSTAT_EOT)
+#define SPI_CH_TXFFE                				(SPI_CHSTAT_TXFFE)
+#define SPI_CH_TXFFF                				(SPI_CHSTAT_TXFFF)
+#define SPI_CH_RXFFE                				(SPI_CHSTAT_RXFFE)
+#define SPI_CH_RXFFF								(SPI_CHSTAT_RXFFF)
+
+// SPI Slave Detect SPIEN Setting
+
+#define SPI_SLAVE_DETECT_0          				(SPI_CHCONF_SPIENSLV_SPIEN0)
+#define SPI_SLAVE_DETECT_1          				(SPI_CHCONF_SPIENSLV_SPIEN1 << SPI_CHCONF_SPIENSLV_SHIFT)
+#define SPI_SLAVE_DETECT_2          				(SPI_CHCONF_SPIENSLV_SPIEN2 << SPI_CHCONF_SPIENSLV_SHIFT)
+#define SPI_SLAVE_DETECT_3          				(SPI_CHCONF_SPIENSLV_SPIEN3 << SPI_CHCONF_SPIENSLV_SHIFT)
+
+// MACRO: SPI Word Length Conversion: 4 <= n <= 32
+
+#define SPI_WORD_LENGTH(n)          				((n - 1) << SPI_CHCONF_WL_SHIFT)
+
+// SPI CS Polarity Setting
+
+#define SPI_CS_POL_HIGH            					(SPI_CHCONF_EPOL_ACTIVEHIGH)
+#define SPI_CS_POL_LOW              				(SPI_CHCONF_EPOL)
+
+// SPI DMA RX/TX Event Setting
+
+#define SPI_DMA_RX_EVENT            				(SPI_CHCONF_DMAR)
+#define SPI_DMA_TX_EVENT            				(SPI_CHCONF_DMAW)
+
+// SPI Turbo Status Bit
+
+#define SPI_SET_STATUS_BIT          				(SPI_SYST_SSB)
+
+// SPI Clock Master Mode Setting
+
+#define SPI_CLK_HIGH                				(SPI_SYST_SPICLK)
+#define SPI_CLK_LOW									(0x00000000)
+
+// SPI SPIEN Definitions
+
+#define SPI_SPIEN_0                 				(SPI_SYST_SPIEN_0)
+#define SPI_SPIEN_1                 				(SPI_SYST_SPIEN_1)
+#define SPI_SPIEN_2                 				(SPI_SYST_SPIEN_2)
+#define SPI_SPIEN_3                 				(SPI_SYST_SPIEN_3)
+
+// SPI MOA Multiple OCP Access Mode
+
+#define SPI_MOA_ENABLE              				(SPI_MODULCTRL_MOA)
+#define SPI_MOA_DISABLE             				(SPI_MODULCTRL_MOA_DISABLED)
+
+// SPI FDAA Mode
+
+#define SPI_FDAA_DISABLE            				(SPI_MODULCTRL_FDAA_NOSHADOWREG)
+#define SPI_FDAA_ENABLE             				(SPI_MODULCTRL_FDAA)
+
+// SPI Auto Idle Mode
+
+#define SPI_AUTO_IDLE_ENABLE       					(SPI_SYSCONFIG_AUTOIDLE_ENABLE)
+#define SPI_AUTO_IDLE_DISABLE       				(SPI_SYSCONFIG_AUTOIDLE_DISABLE)
+
+// SPI Smart Idle Settings
+
+#define SPI_SIDLE_MODE_FORCE        				(SPI_SYSCONFIG_SIDLEMODE_FORCE)
+#define SPI_SIDLE_MODE_NOIDLE       				(SPI_SYSCONFIG_SIDLEMODE_NOIDLE << SPI_SYSCONFIG_SIDLEMODE_SHIFT)
+#define SPI_SIDLE_MODE_SMART        				(SPI_SYSCONFIG_SIDLEMODE_SMART  << SPI_SYSCONFIG_SIDLEMODE_SHIFT)
+
+// SPI Clock Acivity Setting
+
+#define SPI_CLK_ACTIVITY_NONE       				(SPI_SYSCONFIG_CLOCKACTIVITY_NONE)
+#define SPI_CLK_ACTIVITY_OCP        				(SPI_SYSCONFIG_CLOCKACTIVITY_OCP << SPI_SYSCONFIG_CLOCKACTIVITY_SHIFT)
+#define SPI_CLK_ACTIVITY_FUNC       				(SPI_SYSCONFIG_CLOCKACTIVITY_FUNC << SPI_SYSCONFIG_CLOCKACTIVITY_SHIFT)
+#define SPI_CLK_ACTIVITY_BOTH       				(SPI_SYSCONFIG_CLOCKACTIVITY_BOTH << SPI_SYSCONFIG_CLOCKACTIVITY_SHIFT)
+
+// RX/TX Fifo Enable/Disable
+
+#define SPI_RX_FIFO_ENABLE          				(SPI_CHCONF_FFER_FFENABLED)
+#define SPI_RX_FIFO_DISABLE         				(SPI_CHCONF_FFER_FFDISABLED)
+#define SPI_TX_FIFO_ENABLE          				(SPI_CHCONF_FFEW_FFENABLED)
+#define SPI_TX_FIFO_DISABLE         				(SPI_CHCONF_FFEW_FFDISABLED)
+
+// Data Pin Settings
+
+#define SPI_DATA_PIN_HIGH							(0x00000001)
+#define SPI_DATA_PIN_LOW							(0x00000000)
+
+// SPIEN Pin Settings
+
+#define SPI_SPIEN_HIGH								(0x00000001)
+#define SPI_SPIEN_LOW								(0x00000000)
+
+// SPI API
+
+extern uint32_t	Is_TxFIFOEmpty(uint32_t spiAddr, uint32_t chNum);
+extern uint32_t	Is_TxFIFOEnabled(uint32_t spiAddr, uint32_t chNum);
+extern uint32_t	Is_RxFIFOEmpty(uint32_t spiAddr, uint32_t chNum);
+extern uint32_t	Is_RxFIFOEnabled(uint32_t spiAddr, uint32_t chNum);
+extern uint32_t Is_RxDataReady(uint32_t spiAddr, uint32_t chNum);
+extern void 	SPI_AutoIdleSet(uint32_t spiAddr, uint32_t autoIdle);
+extern uint32_t SPI_BlitOutData(uint32_t spiAddr, uint32_t txData, uint32_t bitcount, uint32_t chNum);
+extern void		SPI_ChannelSet(uint32_t spiAddr, uint32_t mode, uint32_t chNum);
+extern uint32_t SPI_ChannelStatusGet(uint32_t spiAddr, uint32_t chNum);
+extern void 	SPI_ClkActivitySet(uint32_t spiAddr, uint32_t clkAct);
+extern void		SPI_ClkConfig(uint32_t spiAddr, uint32_t spiInClk, uint32_t spiOutClk, uint32_t chNum, uint32_t clkMode);
+extern uint32_t SPI_ClkForceWrite(uint32_t spiAddr, uint32_t spiClk);
+extern uint32_t SPI_ClkRead(uint32_t spiAddr, uint32_t *spiClk);
+extern void 	SPI_CSAssert(uint32_t spiAddr, uint32_t chNum);
+extern void		SPI_CSDeAssert(uint32_t spiAddr, uint32_t chNum);
+extern uint32_t SPI_CSForceWrite(uint32_t spiAddr, uint32_t spiEnLvl,uint32_t spiEnNum);
+extern void 	SPI_CSPolaritySet(uint32_t spiAddr, uint32_t spiEnPol, uint32_t chNum);
+extern uint32_t SPI_CSRead(uint32_t spiAddr, uint32_t *spiEn, uint32_t spiEnNum);
+extern void 	SPI_CSSet(uint32_t spiAddr, uint32_t mode);
+extern void 	SPI_CSTimeControlSet(uint32_t spiAddr, uint32_t csTimeControl, uint32_t chNum);
+extern void 	SPI_DataPinDirection(uint32_t spiAddr, uint32_t datDirection);
+extern uint32_t SPI_DataPinRead(uint32_t spiAddr, uint32_t dataPin, uint32_t *spiDat);
+extern uint32_t SPI_DataPinWrite(uint32_t spiAddr, uint32_t dataDir, uint32_t spiDat);
+extern void 	SPI_DMASet(uint32_t spiAddr, uint32_t mode, uint32_t dmaFlags, uint32_t chNum);
+extern void 	SPI_FIFODatSet(uint32_t spiAddr, uint32_t fdaa);
+extern void 	SPI_FIFOTrigLvlSet(uint32_t spiAddr, unsigned char afl, unsigned char ael, uint32_t trMode);
+extern void 	SPI_InitDelaySet(uint32_t spiAddr, uint32_t initDelay);
+extern void 	SPI_IntSet(uint32_t spiAddr, uint32_t mode, uint32_t intFlags);
+extern void 	SPI_IntStatusClear(uint32_t spiAddr, uint32_t intFlags);
+extern uint32_t SPI_IntStatusGet(uint32_t spiAddr);
+extern void 	SPI_MasterModeEnable(uint32_t spiAddr);
+extern uint32_t SPI_MasterModeSet(uint32_t spiAddr, uint32_t channelMode, uint32_t trMode, uint32_t pinMode, uint32_t chNum);
+extern void 	SPI_MultipleWordAccessSet(uint32_t spiAddr, uint32_t moa);
+extern uint32_t SPI_ReceiveData(uint32_t spiAddr,uint32_t chNum);
+extern uint16_t SPI_ReceiveData16(uint32_t spiAddr,uint32_t chNum);
+extern void 	SPI_Reset(uint32_t spiAddr);
+extern void 	SPI_RxFIFOEnable(uint32_t spiAddr, uint32_t chNum);
+extern void 	SPI_RxFIFODisable(uint32_t spiAddr, uint32_t chNum);
+extern void 	SPI_SlaveModeEnable(uint32_t spiAddr);
+extern uint32_t SPI_SlaveModeSet(uint32_t spiAddr, uint32_t trMode, uint32_t pinMode);
+extern void		SPI_SlaveSelect(uint32_t spiAddr, uint32_t slaveSelect);
+extern void 	SPI_SmartIdleSet(uint32_t spiAddr, uint32_t smartIdle);
+extern void 	SPI_StartBitDisable(uint32_t spiAddr,uint32_t chNum);
+extern void 	SPI_StartBitEnable(uint32_t spiAddr, uint32_t chNum);
+extern void 	SPI_StartBitPolaritySet(uint32_t spiAddr, uint32_t startBitPol, uint32_t chNum);
+extern void 	SPI_SysTestModeSet(uint32_t spiAddr, uint32_t sysTest);
+extern void 	SPI_TransmitData(uint32_t spiAddr, uint32_t txData, uint32_t chNum);
+extern void 	SPI_TransmitData16(uint32_t spiAddr, uint32_t txData, uint32_t chNum);
+extern void 	SPI_TurboModeSet(uint32_t spiAddr, uint32_t mode, uint32_t chNum);
+extern void 	SPI_TxFIFOEnable(uint32_t spiAddr, uint32_t chNum);
+extern void 	SPI_TxFIFODisable(uint32_t spiAddr, uint32_t chNum);
+extern void 	SPI_WordCountSet(uint32_t spiAddr, unsigned short wCnt);
+extern void 	SPI_WordLengthSet(uint32_t spiAddr, uint32_t wordLength, uint32_t chNum);
+
+#endif
