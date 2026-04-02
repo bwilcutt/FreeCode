@@ -1,5 +1,5 @@
 #include "beam.h"
-
+ 
 /*************************************************************
  * Function:    run_beam
  * Input:       args (const char*) — the portion of the input line following
@@ -20,6 +20,7 @@ void run_beam(const char *args)
     double      spanLength = 0;
     double      youngsModulus = 0;
     double      secondMomentArea = 0;
+    double      limit360 = 0;
     int         havePointLoad = 0;
     int         haveDistribLoad = 0;
     int         haveSpanLength = 0;
@@ -35,11 +36,11 @@ void run_beam(const char *args)
     const char *typeLabel = NULL;
     const char *loadLabel = NULL;
     const char *momentLocationLabel = NULL;
-
+ 
     /* Defaults: simply supported, center point load */
     strcpy(beamType, "ss");
     strcpy(loadType, "point");
-
+ 
     parse_named_string_param(args, "type", beamType, sizeof(beamType));
     parse_named_string_param(args, "load", loadType, sizeof(loadType));
     parse_named_param(args, "P", &pointLoad,        &havePointLoad);
@@ -47,7 +48,7 @@ void run_beam(const char *args)
     parse_named_param(args, "L", &spanLength,       &haveSpanLength);
     parse_named_param(args, "E", &youngsModulus,    &haveYoungsModulus);
     parse_named_param(args, "I", &secondMomentArea, &haveSecondMoment);
-
+ 
     if (!haveSpanLength || !haveYoungsModulus || !haveSecondMoment)
     {
         printf("  Usage: beam type=ss|cant load=point|udl P=<>|w=<> L=<> E=<> I=<>\n");
@@ -59,13 +60,13 @@ void run_beam(const char *args)
         printf("    I  = second moment of area\n");
         return;
     }
-    if (spanLength      <= 0) { printf("  beam: L must be > 0\n"); return; }
-    if (youngsModulus   <= 0) { printf("  beam: E must be > 0\n"); return; }
+    if (spanLength       <= 0) { printf("  beam: L must be > 0\n"); return; }
+    if (youngsModulus    <= 0) { printf("  beam: E must be > 0\n"); return; }
     if (secondMomentArea <= 0) { printf("  beam: I must be > 0\n"); return; }
-
+ 
     isCantilever = (strcmp(beamType, "cant") == 0);
     isUdl        = (strcmp(loadType, "udl")  == 0);
-
+ 
     if ( isUdl && !haveDistribLoad)
     {
         printf("  beam: UDL requires w=<load per unit length>\n");
@@ -76,7 +77,7 @@ void run_beam(const char *args)
         printf("  beam: point load requires P=<force>\n");
         return;
     }
-
+ 
     if (!isCantilever && !isUdl)
     {
         /* Simply supported — center point load */
@@ -111,11 +112,11 @@ void run_beam(const char *args)
         maxMoment     = distribLoad * spanLength * spanLength / 2.0;  /* at fixed end */
         totalReaction = distribLoad * spanLength;
     }
-
+ 
     typeLabel           = isCantilever ? "Cantilever"        : "Simply Supported";
     loadLabel           = isUdl        ? "Uniform Dist Load" : "Point Load";
     momentLocationLabel = isCantilever ? "at fixed end"      : "at midspan";
-
+ 
     printf("\n  Beam Deflection  [%s — %s]\n", typeLabel, loadLabel);
     printf("  ─────────────────────────────────────\n");
     printf("  Inputs\n");
@@ -131,8 +132,17 @@ void run_beam(const char *args)
            maxDeflection, isCantilever ? "free end" : "midspan");
     printf("    M  (max moment)       = %.6g  (%s)\n", maxMoment, momentLocationLabel);
     printf("    R  (total reaction)   = %.6g\n", totalReaction);
+ 
     set_var("beam_delta", maxDeflection);
     set_var("beam_Mmax",  maxMoment);
     set_var("beam_R",     totalReaction);
+ 
     printf("  (results stored in $beam_delta, $beam_Mmax, $beam_R)\n\n");
+ 
+    limit360 = spanLength / 360.0;
+    if (maxDeflection > limit360)
+    {
+        printf("  [!] WARNING: Deflection exceeds L/360 (Limit: %g)\n\n",
+               limit360);
+    }
 }

@@ -25,8 +25,7 @@ fi
 # ── run tests ──────────────────────────────────────────────
 echo "Running $TESTFILE against $BINARY ..."
 echo ""
- 
-OUTPUT=$(grep -v '^#' "$TESTFILE" | "$BINARY" | sed 's/^< //')
+OUTPUT=$(grep -v '^#' "$TESTFILE" | "$BINARY" | sed $'s/\x01< //g' | grep -v '^< ')
 FAILURES=$(echo "$OUTPUT" | cat -n | grep -E '^\s+[0-9]+\s+0$')
 TOTAL=$(echo "$OUTPUT" | grep -cE '^[01]$')
 FAIL_COUNT=$(echo "$FAILURES" | grep -c '^' )

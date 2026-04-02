@@ -1,0 +1,15 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build",
+            "type": "shell",
+            "command": "gcc $(pkg-config --cflags gtk4) -g main_gui.c app_state.c module_desc.c input_form.c graph.c ../calc/PipeMgr/pipe_mgr.c -I. -I../calc/PipeMgr $(pkg-config --libs gtk4) -lm -o mathrix",
+            "problemMatcher": ["$gcc"],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        }
+    ]
+}

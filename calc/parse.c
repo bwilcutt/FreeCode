@@ -15,6 +15,7 @@
 #include "pid.h"
 #include "csv.h"
 #include "fft.h"
+#include "dump.h"
 
 Variable   *vars = NULL;
 const char *expr;
@@ -866,7 +867,7 @@ int main()
  
     printf("Math Shell (type '?' for help, 'exit' to quit)\n");
  
-    while (printf("< ") && fflush(stdout) == 0 &&
+    while (printf("\x01< ") && fflush(stdout) == 0 &&
            fgets(inputLine, sizeof(inputLine), stdin) &&
            strncmp(inputLine, "exit", 4) != 0)
     {
@@ -877,6 +878,9 @@ int main()
  
         /* ── Built-in commands ── */
         if (inputLine[0] == '?')                           { print_help();                 continue; }
+        if (strncmp(inputLine, "version",     7) == 0)     { printf("parse %s\n", PARSE_VERSION);
+    continue;
+}
         if (strncmp(inputLine, "vars",        4)  == 0)    { list_vars();                  continue; }
         if (strncmp(inputLine, "mats",        4)  == 0)    { list_mat_vars();              continue; }
  
@@ -906,6 +910,7 @@ int main()
         if (strncmp(inputLine, "load",        4)  == 0)    { run_load(inputLine + 4);      continue; }
         if (strncmp(inputLine, "ifft",        4)  == 0)    { run_ifft(inputLine + 4);      continue; }
         if (strncmp(inputLine, "fft",         3)  == 0)    { run_fft (inputLine + 3);      continue; } 
+        if (strncmp(inputLine, "dump",        4)  == 0)    { run_dump(inputLine + 4);      continue; } 
 
         /* ── Variable assignment: $name = rhs (but not $name == expr) ── */
 

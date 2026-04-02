@@ -139,19 +139,19 @@ int pipe_send(const char *cmd)
  * Input:       buf    (char*)  — destination buffer
  *              buflen (size_t) — capacity of buf
  * Output:      int — 1 on success, 0 on read error or EOF
- * Description: Reads lines from from_child_fp one at a time.
- *              Accumulates them into buf until a line beginning
- *              with '<' is seen (the parse prompt).  The prompt
- *              line is consumed but not written to buf.
- *              If buf fills up, new lines overwrite nothing —
- *              they are still read and discarded so the protocol
- *              stays in sync.
+ * Description: Reads bytes from from_child_fp until it sees
+ *              ASCII SOH (\x01) which parse prints immediately
+ *              before every "< " prompt.  On detecting \x01,
+ *              consumes the following '<' and ' ' characters
+ *              and returns — the complete response is in buf.
+ *              Using \x01 rather than '<' at line-start makes
+ *              the protocol unambiguous regardless of what
+ *              characters appear in parse's output.
  *************************************************************/
 int pipe_recv(char *buf, size_t buflen)
 {
     int    c;
     size_t used = 0;
-    int    lineStart = 1;
 
     if (!from_child_fp || buflen == 0) return 0;
 
@@ -159,22 +159,23 @@ int pipe_recv(char *buf, size_t buflen)
 
     while ((c = fgetc(from_child_fp)) != EOF)
     {
-        /* '<' at the start of a line is the prompt — done */
-        if (lineStart && c == '<')
+        /* \x01 SOH = end-of-response marker from parse */
+        if (c == '\x01')
         {
-            fgetc(from_child_fp); /* consume the trailing space */
+            fgetc(from_child_fp); /* consume '<' */
+            fgetc(from_child_fp); /* consume ' ' */
             return 1;
         }
-
-        lineStart = (c == '\n');
 
         if (used + 1 < buflen)
         {
             buf[used++] = (char)c;
             buf[used]   = '\0';
         }
+        /* if buffer full, keep reading until \x01 to stay in sync */
     }
 
+    /* fgetc returned EOF — child process died */
     return 0;
 }
 

@@ -7,6 +7,8 @@
 #include <math.h>
 #include <ctype.h>
 
+#define PARSE_VERSION "1.0.0"
+
 // API
 
 extern int args_have_us_units(const char *args);

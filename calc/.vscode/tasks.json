@@ -9,6 +9,7 @@
                 "-g",
                 "parse.c",
                 "csv.c",
+				"dump.c",
                 "Algo/matrix.c",
                 "Algo/reynolds.c",
                 "Algo/mannings.c",

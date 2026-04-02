@@ -1,4 +1,5 @@
 #include "pid.h"
+#include "matrix.h"
 
 /*************************************************************
  * Function:    pid_clamp
@@ -47,7 +48,6 @@ static void pid_step(const char *args)
     double imin = -1e300, imax = 1e300;
     double omin = -1e300, omax = 1e300;
     int    found;
-
     double integral, prev_err;
     double error, derivative, output;
 
@@ -97,18 +97,10 @@ static void pid_step(const char *args)
  * Input:       args (const char*) — parameter string following "pid sim"
  * Output:      void
  * Description: Simulates a PID controller in closed loop with a first-order
- *              (FOPDT without dead time) plant model for n discrete steps.
+ *              plant model for n discrete steps.
  *
  *              Plant model (Euler-discretised):
  *                pv[k+1] = pv[k] + (dt/tau) * (gain*u[k] - pv[k])
- *
- *              This is the zero-order-hold discretisation of:
- *                tau * dpv/dt = gain*u - pv
- *
- *              Each row of the printed table shows the state at the START of
- *              the corresponding step (pv before the controller acts), the
- *              error used, and the control output produced.  The final row
- *              (step n) shows the pv that results after the last control action.
  *
  *              Named parameters
  *                Kp, Ki, Kd   — PID gains
@@ -121,8 +113,12 @@ static void pid_step(const char *args)
  *                imin, imax   — integrator clamp
  *                omin, omax   — output clamp
  *
- *              Stored variables after the last step
+ *              Stored scalar variables (final step values)
  *                $pid_out, $pid_pv, $pid_integral, $pid_prev_err
+ *
+ *              Stored matrix variables (full time series, n+1 points)
+ *                $pid_pv_vec  — process variable at every step
+ *                $pid_out_vec — control output at every step
  **************************************************************/
 static void pid_sim(const char *args)
 {
@@ -133,10 +129,13 @@ static void pid_sim(const char *args)
     double imin = -1e300, imax = 1e300;
     double omin = -1e300, omax = 1e300;
     int    found;
-
     int    n, i;
     double pv, integral, prev_err;
     double error, derivative, output;
+    double *pv_history;
+    double *out_history;
+    Matrix *pv_mat;
+    Matrix *out_mat;
 
     parse_named_param(args, "Kp",   &Kp,   &found);
     parse_named_param(args, "Ki",   &Ki,   &found);
@@ -161,16 +160,30 @@ static void pid_sim(const char *args)
     prev_err = 0.0;
     output   = 0.0;
 
+    /* ── allocate history arrays (n+1 points including step 0) ── */
+    pv_history  = malloc((n + 1) * sizeof(double));
+    out_history = malloc((n + 1) * sizeof(double));
+    if (!pv_history || !out_history)
+    {
+        printf("  pid sim: out of memory\n");
+        free(pv_history);
+        free(out_history);
+        return;
+    }
+
     printf("\n  PID Closed-Loop Simulation\n");
     printf("  Gains : Kp=%.6g  Ki=%.6g  Kd=%.6g\n", Kp, Ki, Kd);
     printf("  Plant : gain=%.6g  tau=%.6g\n", gain, tau);
-    printf("  Run   : sp=%.6g  pv0=%.6g  dt=%.6g  n=%d\n\n", sp, pv0, dt, n);
+    printf("  Run   : sp=%.6g  pv0=%.6g  dt=%.6g  n=%d\n\n",
+           sp, pv0, dt, n);
     printf("  %-6s  %-14s  %-14s  %-14s  %-14s\n",
            "step", "time", "pv", "error", "output");
     printf("  ──────  ──────────────  ──────────────"
            "  ──────────────  ──────────────\n");
 
     /* Step 0: initial state, no control action yet */
+    pv_history[0]  = pv;
+    out_history[0] = 0.0;
     printf("  %-6d  %-14.6g  %-14.6g  %-14.6g  %-14.6g\n",
            0, 0.0, pv, sp - pv, 0.0);
 
@@ -179,12 +192,16 @@ static void pid_sim(const char *args)
         error      = sp - pv;
         integral   = pid_clamp(integral + error * dt, imin, imax);
         derivative = (i == 1) ? 0.0 : (error - prev_err) / dt;
-        output     = pid_clamp(Kp * error + Ki * integral + Kd * derivative,
-                               omin, omax);
+        output     = pid_clamp(
+                         Kp * error + Ki * integral + Kd * derivative,
+                         omin, omax);
         prev_err   = error;
 
         /* Euler plant update: pv[k+1] = pv[k] + (dt/tau)*(gain*u - pv[k]) */
         pv = pv + (dt / tau) * (gain * output - pv);
+
+        pv_history[i]  = pv;
+        out_history[i] = output;
 
         printf("  %-6d  %-14.6g  %-14.6g  %-14.6g  %-14.6g\n",
                i, i * dt, pv, error, output);
@@ -193,12 +210,25 @@ static void pid_sim(const char *args)
     printf("  ──────  ──────────────  ──────────────"
            "  ──────────────  ──────────────\n\n");
 
+    /* ── store scalar end-state (backward compatible) ── */
     set_var("pid_integral", integral);
     set_var("pid_prev_err", prev_err);
     set_var("pid_out",      output);
     set_var("pid_pv",       pv);
 
-    printf("  $pid_pv = %g   $pid_out = %g\n\n", pv, output);
+    /* ── store full time-series as matrix column vectors ── */
+    pv_mat  = mat_new(n + 1, 1);
+    out_mat = mat_new(n + 1, 1);
+    memcpy(pv_mat->data,  pv_history,  (n + 1) * sizeof(double));
+    memcpy(out_mat->data, out_history, (n + 1) * sizeof(double));
+    set_mat_var("pid_pv_vec",  pv_mat);
+    set_mat_var("pid_out_vec", out_mat);
+    free(pv_history);
+    free(out_history);
+
+    printf("  $pid_pv = %g   $pid_out = %g\n", pv, output);
+    printf("  $pid_pv_vec  [%d x 1]  — full PV time series\n",  n + 1);
+    printf("  $pid_out_vec [%d x 1]  — full output time series\n\n", n + 1);
 }
 
 /*************************************************************
@@ -210,23 +240,17 @@ static void pid_sim(const char *args)
  *
  *              method=zn   Ziegler-Nichols ultimate-gain method
  *                Required : Ku=<ultimate gain>  Tu=<ultimate period>
- *                Reference: Ziegler & Nichols (1942), closed-loop test.
  *
  *              method=znol Ziegler-Nichols open-loop (reaction-curve) method
  *                Required : K=<plant gain>  L=<dead time>  tau=<time constant>
- *                Reference: Ziegler & Nichols (1942), step-response test.
  *
  *              method=cc   Cohen-Coon
  *                Required : K=<plant gain>  L=<dead time>  tau=<time constant>
- *                Reference: Cohen & Coon (1953).
  *
  *              All three methods support type=P|PI|PID (default: PID).
  *
  *              Stored variables
  *                $pid_Kp, $pid_Ki, $pid_Kd, $pid_Ti, $pid_Td
- *
- *              Ki = Kp / Ti    (integral gain in parallel form)
- *              Kd = Kp * Td    (derivative gain in parallel form)
  **************************************************************/
 static void pid_tune(const char *args)
 {
@@ -241,10 +265,10 @@ static void pid_tune(const char *args)
 
     parse_named_string_param(args, "method", method, sizeof(method));
     parse_named_string_param(args, "type",   type,   sizeof(type));
-    parse_named_param(args, "Ku",  &Ku,   &found);
-    parse_named_param(args, "Tu",  &Tu,   &found);
-    parse_named_param(args, "K",   &K,    &found);
-    parse_named_param(args, "L",   &L,    &found);
+    parse_named_param(args, "Ku",  &Ku,    &found);
+    parse_named_param(args, "Tu",  &Tu,    &found);
+    parse_named_param(args, "K",   &K,     &found);
+    parse_named_param(args, "L",   &L,     &found);
     parse_named_param(args, "tau", &tau_p, &found);
 
     /* ── Ziegler-Nichols: Ultimate-Gain Method ── */
@@ -273,7 +297,6 @@ static void pid_tune(const char *args)
             Td = Tu   / 8.0;
         }
     }
-
     /* ── Ziegler-Nichols: Open-Loop Reaction-Curve Method ── */
     else if (strcmp(method, "znol") == 0)
     {
@@ -300,7 +323,6 @@ static void pid_tune(const char *args)
             Td = 0.5  * L;
         }
     }
-
     /* ── Cohen-Coon ── */
     else if (strcmp(method, "cc") == 0)
     {
@@ -309,8 +331,7 @@ static void pid_tune(const char *args)
             printf("  pid tune cc requires K=<> L=<> tau=<> (all non-zero)\n");
             return;
         }
-        r = L / tau_p;   /* normalised dead-time ratio */
-
+        r = L / tau_p;
         if (strcmp(type, "P") == 0)
         {
             Kp = (1.0 / K) * (tau_p / L) * (1.0 + r / 3.0);
@@ -329,7 +350,6 @@ static void pid_tune(const char *args)
             Td = L *  4.0             / (11.0 + 2.0 * r);
         }
     }
-
     else
     {
         printf("  Unknown tuning method '%s'  (use: zn | znol | cc)\n", method);
@@ -340,7 +360,6 @@ static void pid_tune(const char *args)
     Ki = (Ti > 0.0) ? Kp / Ti : 0.0;
     Kd = Kp * Td;
 
-    /* Display */
     printf("\n  PID Tuning\n");
     printf("  Method : %s", method);
     if (strcmp(method, "zn") == 0)
@@ -352,7 +371,7 @@ static void pid_tune(const char *args)
     printf("  Type   : %s controller\n", type);
     printf("  ──────────────────────────────────\n");
     printf("  Kp = %g\n",  Kp);
-    printf("  Ti = %g      (integral time)\n",  Ti);
+    printf("  Ti = %g      (integral time)\n",   Ti);
     printf("  Td = %g      (derivative time)\n", Td);
     printf("  Ki = %g      (= Kp/Ti, parallel form)\n", Ki);
     printf("  Kd = %g      (= Kp*Td, parallel form)\n", Kd);
@@ -370,8 +389,7 @@ static void pid_tune(const char *args)
  * Input:       args (const char*) — everything after the "pid" token
  * Output:      void
  * Description: Strips leading whitespace, then dispatches to pid_step(),
- *              pid_sim(), pid_tune(), or a state reset.  Prints usage on
- *              unrecognised sub-commands.
+ *              pid_sim(), pid_tune(), or a state reset.
  **************************************************************/
 void run_pid(const char *args)
 {
@@ -380,7 +398,6 @@ void run_pid(const char *args)
     if (strncmp(args, "step",  4) == 0) { pid_step(args + 4);  return; }
     if (strncmp(args, "sim",   3) == 0) { pid_sim(args + 3);   return; }
     if (strncmp(args, "tune",  4) == 0) { pid_tune(args + 4);  return; }
-
     if (strncmp(args, "reset", 5) == 0)
     {
         set_var("pid_integral", 0.0);
@@ -390,17 +407,18 @@ void run_pid(const char *args)
     }
 
     printf("\n  PID sub-commands\n");
-    printf("  ─────────────────────────────────────────────────────────────────────\n");
+    printf("  ──────────────────────────────────────────────────────────\n");
     printf("  pid step  Kp=<> Ki=<> Kd=<> sp=<> pv=<> dt=<>\n");
     printf("            [imin=<> imax=<>]  [omin=<> omax=<>]\n");
     printf("    -> $pid_out  $pid_error  $pid_integral  $pid_prev_err\n\n");
     printf("  pid sim   Kp=<> Ki=<> Kd=<> sp=<> pv0=<> dt=<> n=<>\n");
     printf("            gain=<> tau=<>  [imin=<> imax=<>]  [omin=<> omax=<>]\n");
-    printf("    -> $pid_pv  $pid_out  $pid_integral  $pid_prev_err\n\n");
-    printf("  pid tune  method=zn   Ku=<> Tu=<>              [type=P|PI|PID]\n");
-    printf("  pid tune  method=znol K=<> L=<> tau=<>         [type=P|PI|PID]\n");
-    printf("  pid tune  method=cc   K=<> L=<> tau=<>         [type=P|PI|PID]\n");
+    printf("    -> $pid_pv  $pid_out  (scalars, final step)\n");
+    printf("    -> $pid_pv_vec  $pid_out_vec  (full time series)\n\n");
+    printf("  pid tune  method=zn   Ku=<> Tu=<>           [type=P|PI|PID]\n");
+    printf("  pid tune  method=znol K=<> L=<> tau=<>      [type=P|PI|PID]\n");
+    printf("  pid tune  method=cc   K=<> L=<> tau=<>      [type=P|PI|PID]\n");
     printf("    -> $pid_Kp  $pid_Ki  $pid_Kd  $pid_Ti  $pid_Td\n\n");
     printf("  pid reset\n");
-    printf("  ─────────────────────────────────────────────────────────────────────\n\n");
+    printf("  ──────────────────────────────────────────────────────────\n\n");
 }
