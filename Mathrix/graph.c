@@ -279,13 +279,15 @@ static GraphData *fetch_module_data(const ModuleDesc *desc)
 {
     AppState   *st = app_state_get();
     const char *y_var = NULL;
+    const char *y_suffix = NULL;
     char        cmd[128];
+    char        try_var[64];
     int         i;
     int         n = 0;
     double     *y_data;
     GraphData  *gd;
 
-    /* find the Y variable */
+    /* find the Y variable and its suffix */
     for (i = 0; i < desc->n_outputs; i++)
         if (strcmp(desc->outputs[i].plot_role, "y") == 0)
         {
@@ -294,21 +296,83 @@ static GraphData *fetch_module_data(const ModuleDesc *desc)
         }
     if (!y_var) return NULL;
 
-    /* use dump command for clean machine-readable output */
+    /* ── first try the descriptor's default variable name ── */
     snprintf(cmd, sizeof(cmd), "dump $%s\n", y_var);
-    if (!pipe_transact(cmd, st->response_buf, RESPONSE_BUFSIZE))
+    if (pipe_transact(cmd, st->response_buf, RESPONSE_BUFSIZE))
+    {
+        y_data = parse_vector_response(st->response_buf, &n);
+        if (y_data && n > 0)
+        {
+            gd         = g_new0(GraphData, 1);
+            gd->n      = n;
+            gd->y_data = y_data;
+            gd->x_data = g_new(double, n);
+            for (i = 0; i < n; i++) gd->x_data[i] = (double)i;
+            return gd;
+        }
+        g_free(y_data);
+    }
+
+    /* ── fallback: find the suffix of the descriptor var name ──
+       e.g. "ifft_out" → suffix "_out", "fft_mag" → suffix "_mag"
+       Then scan mats output for a variable ending in that suffix. ── */
+    y_suffix = strrchr(y_var, '_');
+    if (!y_suffix) return NULL;
+
+    /* get list of matrix variables */
+    if (!pipe_transact("mats\n", st->response_buf, RESPONSE_BUFSIZE))
         return NULL;
 
-    y_data = parse_vector_response(st->response_buf, &n);
-    if (!y_data || n == 0) { g_free(y_data); return NULL; }
+    /* scan response for lines like "  $varname  [NxM]" */
+    {
+        const char *p = st->response_buf;
+        char        var_name[64];
+        int         vlen;
 
-    gd           = g_new0(GraphData, 1);
-    gd->n        = n;
-    gd->y_data   = y_data;
-    gd->x_data   = g_new(double, n);
-    for (i = 0; i < n; i++) gd->x_data[i] = (double)i;
+        while (*p)
+        {
+            /* skip to '$' */
+            while (*p && *p != '$') p++;
+            if (!*p) break;
+            p++; /* skip '$' */
 
-    return gd;
+            /* read variable name */
+            vlen = 0;
+            while (*p && !isspace((unsigned char)*p) && vlen < 63)
+                var_name[vlen++] = *p++;
+            var_name[vlen] = '\0';
+
+            /* check if this var ends with the right suffix */
+            if (vlen > 0)
+            {
+                char *suf = strrchr(var_name, '_');
+                if (suf && strcmp(suf, y_suffix) == 0)
+                {
+                    /* try dumping this variable */
+                    snprintf(cmd, sizeof(cmd), "dump $%s\n", var_name);
+                    if (pipe_transact(cmd, st->response_buf,
+                                      RESPONSE_BUFSIZE))
+                    {
+                        y_data = parse_vector_response(
+                                     st->response_buf, &n);
+                        if (y_data && n > 0)
+                        {
+                            gd         = g_new0(GraphData, 1);
+                            gd->n      = n;
+                            gd->y_data = y_data;
+                            gd->x_data = g_new(double, n);
+                            for (i = 0; i < n; i++)
+                                gd->x_data[i] = (double)i;
+                            return gd;
+                        }
+                        g_free(y_data);
+                    }
+                }
+            }
+        }
+    }
+
+    return NULL;
 }
 
 /*************************************************************

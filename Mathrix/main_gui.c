@@ -8,6 +8,10 @@
 #include "pipe_mgr.h"
 #include "colors.h"
 
+/* ═══════════════════════════════════════════════════════════
+   FORWARD DECLARATIONS
+   ═══════════════════════════════════════════════════════════ */
+
 static void     build_menu_bar     (GtkWidget *box);
 static void     build_command_bar  (GtkWidget *box);
 static void     build_center_panes (GtkWidget *box);
@@ -24,6 +28,10 @@ static void     on_quit            (GSimpleAction *action, GVariant *param,
                                     gpointer user_data);
 static gboolean connect_to_parse   (void);
 static void     query_parse_version(void);
+
+/* ═══════════════════════════════════════════════════════════
+   CSS — visual styling
+   ═══════════════════════════════════════════════════════════ */
 
 static const char *CSS =
     /* ── Catppuccin Macchiato — all colors from colors.h ── */
@@ -407,6 +415,11 @@ static const char *CSS =
     "  background-color: " MX_BLUE ";"
     "}";
 
+
+/* ═══════════════════════════════════════════════════════════
+   MENU BAR
+   ═══════════════════════════════════════════════════════════ */
+
 /*************************************************************
  * Function:    build_menu_bar
  * Input:       box (GtkWidget*) — vertical box to append into
@@ -453,6 +466,7 @@ static void build_menu_bar(GtkWidget *box)
         popover = gtk_popover_menu_new_from_model(G_MENU_MODEL(gmenu));
         gtk_menu_button_set_label(GTK_MENU_BUTTON(btn), "File");
         gtk_menu_button_set_popover(GTK_MENU_BUTTON(btn), popover);
+        gtk_widget_set_focus_on_click(btn, FALSE);
         gtk_widget_add_css_class(btn, "mathrix-menubar");
         gtk_box_append(GTK_BOX(hbox), btn);
         g_object_unref(gmenu);
@@ -469,6 +483,7 @@ static void build_menu_bar(GtkWidget *box)
         popover = gtk_popover_menu_new_from_model(G_MENU_MODEL(gmenu));
         gtk_menu_button_set_label(GTK_MENU_BUTTON(btn), "Help");
         gtk_menu_button_set_popover(GTK_MENU_BUTTON(btn), popover);
+        gtk_widget_set_focus_on_click(btn, FALSE);
         gtk_widget_add_css_class(btn, "mathrix-menubar");
         gtk_box_append(GTK_BOX(hbox), btn);
         g_object_unref(gmenu);
@@ -507,6 +522,7 @@ static void build_menu_bar(GtkWidget *box)
         btn = gtk_menu_button_new();
         gtk_menu_button_set_label(GTK_MENU_BUTTON(btn), cats[i]);
         gtk_menu_button_set_popover(GTK_MENU_BUTTON(btn), popover);
+        gtk_widget_set_focus_on_click(btn, FALSE);
         gtk_widget_add_css_class(btn, "mathrix-menubar");
         gtk_box_append(GTK_BOX(hbox), btn);
     }
@@ -514,6 +530,10 @@ static void build_menu_bar(GtkWidget *box)
     gtk_box_append(GTK_BOX(bar),  hbox);
     gtk_box_append(GTK_BOX(box),  bar);
 }
+
+/* ═══════════════════════════════════════════════════════════
+   COMMAND BAR
+   ═══════════════════════════════════════════════════════════ */
 
 /*************************************************************
  * Function:    build_command_bar
@@ -549,6 +569,10 @@ static void build_command_bar(GtkWidget *box)
 
     st->cmd_entry = entry;
 }
+
+/* ═══════════════════════════════════════════════════════════
+   CENTER PANES
+   ═══════════════════════════════════════════════════════════ */
 
 /*************************************************************
  * Function:    build_center_panes
@@ -627,6 +651,10 @@ static void build_center_panes(GtkWidget *box)
     gtk_box_append(GTK_BOX(box), paned);
 }
 
+/* ═══════════════════════════════════════════════════════════
+   STATUS BAR
+   ═══════════════════════════════════════════════════════════ */
+
 /*************************************************************
  * Function:    build_status_bar
  * Input:       box (GtkWidget*) — vertical box to append into
@@ -646,6 +674,10 @@ static void build_status_bar(GtkWidget *box)
     gtk_box_append(GTK_BOX(box), lbl);
     st->status_bar = lbl;
 }
+
+/* ═══════════════════════════════════════════════════════════
+   SIGNAL HANDLERS
+   ═══════════════════════════════════════════════════════════ */
 
 /*************************************************************
  * Function:    on_cmd_activate
@@ -720,6 +752,8 @@ static void on_about(GSimpleAction *action, GVariant *param,
     GtkWidget *lbl;
     GtkWidget *btn;
     GtkWidget *vbox;
+    GtkWidget *hbox;
+    GtkWidget *logo;
 
     snprintf(msg, sizeof(msg),
         "<big><b>Mathrix</b></big>  v%s\n\n"
@@ -735,20 +769,46 @@ static void on_about(GSimpleAction *action, GVariant *param,
                                   GTK_WINDOW(st->window));
     gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
     gtk_window_set_resizable(GTK_WINDOW(dialog), FALSE);
-    gtk_window_set_default_size(GTK_WINDOW(dialog), 360, 220);
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 520, 240);
     gtk_widget_add_css_class(dialog, "mathrix-dialog");
 
+    /* ── headerbar so title always shows ── */
+    {
+        GtkWidget *hdr = gtk_header_bar_new();
+        gtk_header_bar_set_show_title_buttons(GTK_HEADER_BAR(hdr), TRUE);
+        gtk_window_set_titlebar(GTK_WINDOW(dialog), hdr);
+    }
+
+    /* ── outer vertical box ── */
     vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
     gtk_widget_set_margin_start(vbox,  24);
     gtk_widget_set_margin_end(vbox,    24);
     gtk_widget_set_margin_top(vbox,    24);
     gtk_widget_set_margin_bottom(vbox, 24);
 
+    /* ── horizontal box: text left, logo right ── */
+    hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
+    gtk_widget_set_vexpand(hbox, TRUE);
+
+    /* text label */
     lbl = gtk_label_new(NULL);
     gtk_label_set_markup(GTK_LABEL(lbl), msg);
-    gtk_label_set_justify(GTK_LABEL(lbl), GTK_JUSTIFY_CENTER);
-    gtk_box_append(GTK_BOX(vbox), lbl);
+    gtk_label_set_justify(GTK_LABEL(lbl), GTK_JUSTIFY_LEFT);
+    gtk_label_set_xalign(GTK_LABEL(lbl), 0.0f);
+    gtk_widget_set_hexpand(lbl, TRUE);
+    gtk_widget_set_valign(lbl, GTK_ALIGN_CENTER);
+    gtk_box_append(GTK_BOX(hbox), lbl);
 
+    /* logo — load from file next to the binary */
+    logo = gtk_image_new_from_file("logo.png");
+    gtk_image_set_pixel_size(GTK_IMAGE(logo), 175);
+    gtk_widget_set_valign(logo, GTK_ALIGN_CENTER);
+    gtk_widget_set_halign(logo, GTK_ALIGN_END);
+    gtk_box_append(GTK_BOX(hbox), logo);
+
+    gtk_box_append(GTK_BOX(vbox), hbox);
+
+    /* close button */
     btn = gtk_button_new_with_label("Close");
     gtk_widget_add_css_class(btn, "mathrix-run-btn");
     gtk_widget_set_halign(btn, GTK_ALIGN_CENTER);
@@ -790,6 +850,10 @@ static void on_quit(GSimpleAction *action, GVariant *param,
     g_application_quit(G_APPLICATION(user_data));
 }
 
+/* ═══════════════════════════════════════════════════════════
+   PARSE CONNECTION
+   ═══════════════════════════════════════════════════════════ */
+
 /*************************************************************
  * Function:    connect_to_parse
  * Input:       void
@@ -820,6 +884,12 @@ static gboolean connect_to_parse(void)
         gtk_window_set_modal(GTK_WINDOW(dlg), TRUE);
         gtk_window_set_resizable(GTK_WINDOW(dlg), FALSE);
         gtk_widget_add_css_class(dlg, "mathrix-dialog");
+
+        {
+            GtkWidget *hdr = gtk_header_bar_new();
+            gtk_header_bar_set_show_title_buttons(GTK_HEADER_BAR(hdr), TRUE);
+            gtk_window_set_titlebar(GTK_WINDOW(dlg), hdr);
+        }
 
         gtk_widget_set_margin_start(vbox,  24);
         gtk_widget_set_margin_end(vbox,    24);
@@ -867,6 +937,10 @@ static void query_parse_version(void)
     strncpy(st->parse_version, buf, sizeof(st->parse_version) - 1);
 }
 
+/* ═══════════════════════════════════════════════════════════
+   APPLICATION ACTIVATE
+   ═══════════════════════════════════════════════════════════ */
+
 /*************************************************************
  * Function:    on_activate
  * Input:       app       (GtkApplication*) — the application
@@ -897,7 +971,7 @@ static void on_activate(GtkApplication *app, gpointer user_data)
     /* ── main window ── */
     window = gtk_application_window_new(app);
     gtk_window_set_title(GTK_WINDOW(window), "Mathrix");
-    gtk_window_set_default_size(GTK_WINDOW(window), 1100, 700);
+    gtk_window_set_default_size(GTK_WINDOW(window), 1280, 700);
     st->window = window;
 
     /* ── CSS ── */
@@ -937,6 +1011,10 @@ static void on_activate(GtkApplication *app, gpointer user_data)
 
     gtk_window_present(GTK_WINDOW(window));
 }
+
+/* ═══════════════════════════════════════════════════════════
+   MAIN
+   ═══════════════════════════════════════════════════════════ */
 
 /*************************************************************
  * Function:    main

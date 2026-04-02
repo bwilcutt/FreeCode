@@ -987,6 +987,18 @@ $ramp_mag
 det(transpose($csv_dc_mag) * $csv_dc_mag)
 det(transpose($dc8_mag) * $dc8_mag)
 # ═══════════════════════════════════════════════════════════
+# DUMP COMMAND
+# ═══════════════════════════════════════════════════════════
+# ── basic dump of a known vector ────────────────────────────
+$dump_test = [3 1 4 1 5]
+dump $dump_test
+# ── dump of FFT output ──────────────────────────────────────
+$d_imp = [1 0 0 0 0 0 0 0]
+fft $d_imp var=d_imp
+dump $d_imp_mag
+# ── dump of unknown variable prints error ───────────────────
+dump $nonexistent_var
+# ═══════════════════════════════════════════════════════════
 # FINAL STATE DUMP
 # ═══════════════════════════════════════════════════════════
 vars
