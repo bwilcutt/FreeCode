@@ -2,6 +2,8 @@
 #include "app_state.h"
 #include "pipe_mgr.h"
 #include "colors.h"
+#include "mohr_graph.h"
+#include "beam_graph.h"
 
 #include <gtk/gtk.h>
 #include <cairo.h>
@@ -62,19 +64,10 @@
 
 /* ═══════════════════════════════════════════════════════════
    GRAPH WINDOW DATA
-   Private per-window state; heap-allocated, freed on destroy.
+   Defined in graph_data.h so mohr_graph.c can access it too.
    ═══════════════════════════════════════════════════════════ */
 
-typedef struct
-{
-    char    *title;
-    char    *x_label;
-    char    *y_label;
-    double  *x_data;
-    double  *y_data;
-    int      n;
-    PlotType plot_type;
-} GraphData;
+#include "graph_data.h"
 
 /* ═══════════════════════════════════════════════════════════
    FORWARD DECLARATIONS
@@ -206,7 +199,10 @@ void graph_window_open_vars(const char   *title,
     window = gtk_window_new();
     gtk_window_set_title(GTK_WINDOW(window), gd->title);
     gtk_window_set_default_size(GTK_WINDOW(window),
-                                 GRAPH_MIN_W + 100, GRAPH_MIN_H + 60);
+                                 plot_type == PLOT_MOHR
+                                     ? GRAPH_MIN_W + 280
+                                     : GRAPH_MIN_W + 100,
+                                 GRAPH_MIN_H + 60);
     gtk_window_set_transient_for(GTK_WINDOW(window),
                                   GTK_WINDOW(st->window));
     /* NOT modal — autonomous */
@@ -506,6 +502,10 @@ static void on_draw(GtkDrawingArea *da, cairo_t *cr,
 
     if (gd->plot_type == PLOT_STEM)
         draw_stem_plot(cr, w, h, gd);
+    else if (gd->plot_type == PLOT_MOHR)
+        draw_mohr_plot(cr, w, h, gd);
+    else if (gd->plot_type == PLOT_BEAM)
+        draw_beam_plot(cr, w, h, gd);
     else
         draw_line_plot(cr, w, h, gd);
 }
@@ -861,10 +861,6 @@ static void draw_stem_plot(cairo_t *cr, int w, int h,
 
     cairo_restore(cr);
 }
-
-/* ═══════════════════════════════════════════════════════════
-   CLEANUP
-   ═══════════════════════════════════════════════════════════ */
 
 /*************************************************************
  * Function:    graph_data_free

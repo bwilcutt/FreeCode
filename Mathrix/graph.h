@@ -63,4 +63,14 @@ void graph_window_open_vars(const char   *title,
                             const double *y_data,
                             int           n);
 
+/*************************************************************
+ * Function:    graph_window_open_mohr
+ * Input:       void — reads scalar variables from parse
+ * Output:      void
+ * Description: Queries parse for all Mohr's Circle variables
+ *              and opens an autonomous graph window showing
+ *              the circle, stress points, and annotations.
+ *************************************************************/
+void graph_window_open_mohr(void);
+
 #endif /* GRAPH_H */

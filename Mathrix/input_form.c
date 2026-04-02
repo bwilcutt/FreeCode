@@ -2,6 +2,8 @@
 #include "app_state.h"
 #include "module_desc.h"
 #include "graph.h"
+#include "mohr_graph.h"
+#include "beam_graph.h"
 #include "pipe_mgr.h"
 
 #include <gtk/gtk.h>
@@ -257,7 +259,13 @@ void input_form_plot(void)
     if (!desc || !desc->has_plot) return;
 
     input_form_run();
-    graph_window_open(desc);
+
+    if (desc->plot_type == PLOT_MOHR)
+        graph_window_open_mohr();
+    else if (desc->plot_type == PLOT_BEAM)
+        graph_window_open_beam();
+    else
+        graph_window_open(desc);
 }
 
 /* ═══════════════════════════════════════════════════════════

@@ -75,7 +75,9 @@ typedef enum
     PLOT_NONE = 0,
     PLOT_LINE,
     PLOT_STEM,
-    PLOT_XY
+    PLOT_XY,
+    PLOT_MOHR,
+    PLOT_BEAM
 } PlotType;
 
 /* ═══════════════════════════════════════════════════════════

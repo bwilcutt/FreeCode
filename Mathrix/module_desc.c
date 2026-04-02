@@ -198,10 +198,8 @@ const ModuleDesc modules[] =
             { "beam_R",     "Reaction",       "N",   0, "" },
         },
         3,
-        0, PLOT_NONE, NULL
+        1, PLOT_BEAM, "Beam Deflection Diagram"
     },
-
-    /* ── Axial Stress ──────────────────────────────────────── */
     {
         "stress",
         "Axial Stress / Strain",
@@ -249,7 +247,7 @@ const ModuleDesc modules[] =
             { "mohrs_theta", "Angle θp",     "deg", 0, "" },
         },
         4,
-        0, PLOT_NONE, NULL
+        1, PLOT_MOHR, "Mohr's Circle"
     },
 
     /* ── Ideal Gas Law ─────────────────────────────────────── */

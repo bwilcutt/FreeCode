@@ -11,7 +11,10 @@
  *              Calculates the average normal stress, circle radius, maximum and
  *              minimum principal stresses, maximum shear stress, and the angle
  *              to the principal plane in degrees.
- *              Results are stored in $mohrs_s1, $mohrs_s2, $mohrs_tmax, $mohrs_theta.
+ *              Results are stored in $mohrs_s1, $mohrs_s2, $mohrs_tmax,
+ *              $mohrs_theta, $mohrs_sx, $mohrs_sy, $mohrs_txy.
+ *              The sx/sy/txy inputs are also stored so the GUI can reconstruct
+ *              the original stress points on the Mohr's Circle diagram.
  **************************************************************/
 void run_mohrs(const char *args)
 {
@@ -49,7 +52,8 @@ void run_mohrs(const char *args)
     minPrincipalStress  = averageNormalStress - circleRadius;
     maxShearStress      = circleRadius;
     principalAngleDeg   = 0.5 * atan2(2.0 * shearStressXY,
-                                      normalStressX - normalStressY) * 180.0 / M_PI;
+                                      normalStressX - normalStressY)
+                          * 180.0 / M_PI;
 
     printf("\n  Mohr's Circle\n");
     printf("  ─────────────────────────────────────\n");
@@ -63,10 +67,20 @@ void run_mohrs(const char *args)
     printf("    s1     (max principal)= %.4f\n", maxPrincipalStress);
     printf("    s2     (min principal)= %.4f\n", minPrincipalStress);
     printf("    tmax   (max shear)    = %.4f\n", maxShearStress);
-    printf("    theta  (principal angle) = %.4f deg  (from x-axis)\n", principalAngleDeg);
+    printf("    theta  (principal angle) = %.4f deg  (from x-axis)\n",
+           principalAngleDeg);
+
+    /* ── store results ── */
     set_var("mohrs_s1",    maxPrincipalStress);
     set_var("mohrs_s2",    minPrincipalStress);
     set_var("mohrs_tmax",  maxShearStress);
     set_var("mohrs_theta", principalAngleDeg);
-    printf("  (results stored in $mohrs_s1, $mohrs_s2, $mohrs_tmax, $mohrs_theta)\n\n");
+
+    /* ── store inputs so GUI can plot original stress points ── */
+    set_var("mohrs_sx",    normalStressX);
+    set_var("mohrs_sy",    normalStressY);
+    set_var("mohrs_txy",   shearStressXY);
+
+    printf("  (results stored in $mohrs_s1, $mohrs_s2, $mohrs_tmax,\n");
+    printf("   $mohrs_theta, $mohrs_sx, $mohrs_sy, $mohrs_txy)\n\n");
 }
