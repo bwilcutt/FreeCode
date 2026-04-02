@@ -13,6 +13,8 @@
 #include "idealgas.h"
 #include "conduct.h"
 #include "pid.h"
+#include "csv.h"
+#include "fft.h"
 
 Variable   *vars = NULL;
 const char *expr;
@@ -118,6 +120,8 @@ double parse_factor()
         if (strcmp(funcName, "abs")  == 0) return fabs(argValue);
         if (strcmp(funcName, "log")  == 0) return log(argValue);
         if (strcmp(funcName, "exp")  == 0) return exp(argValue);
+        if (strcmp(funcName, "floor")== 0) return floor(argValue);
+        if (strcmp(funcName, "ceil") == 0) return ceil(argValue);
         printf("Unknown function: %s\n", funcName);
         return 0;
     }
@@ -648,6 +652,7 @@ void print_help()
         "    sin(x)  cos(x)  tan(x)    trig\n"
         "    sqrt(x) abs(x)            root / absolute value\n"
         "    log(x)  exp(x)            natural log / exponential\n"
+        "    floor(x) ceil(x)          round toward zero / away\n"        
         "\n"
         "  Scalar variables\n"
         "    $name = expr         assign\n"
@@ -741,6 +746,29 @@ void print_help()
         "\n"
         "    pid reset            zero $pid_integral and $pid_prev_err\n"
         "\n"
+        "  ── Signal Processing ─────────────────────────────────\n"
+        "  Load CSV data\n"
+        "    load <file.csv> [col=<N>] [var=<name>]\n"
+        "    -> reads column N (default 1) into $<name> (default $signal)\n"
+        "    -> auto-detects comma/tab/space delimiter; skips header row\n"
+        "\n"
+        "  Fast Fourier Transform  (Cooley-Tukey radix-2)\n"
+        "    fft  $vec  [var=<prefix>]\n"
+        "    -> zero-pads to next power of two if needed\n"
+        "    -> stores $<prefix>_re  $<prefix>_im\n"
+        "               $<prefix>_mag  $<prefix>_phase\n"
+        "    -> prefix defaults to \"fft\"\n"
+        "\n"
+        "  Inverse FFT\n"
+        "    ifft $re_var $im_var  [var=<prefix>]\n"
+        "    -> stores $<prefix>_out  (real part only)\n"
+        "    -> prefix defaults to \"ifft\"\n"
+        "\n"
+        "  Typical workflow:\n"
+        "    load samples.csv col=2\n"
+        "    fft $signal\n"
+        "    $peak = $fft_mag\n"
+        "\n"        
         "  ── Shell Commands ────────────────────────────────────\n"
         "    ?                    show this help\n"
         "    vars                 list scalar variables\n"
@@ -838,7 +866,7 @@ int main()
  
     printf("Math Shell (type '?' for help, 'exit' to quit)\n");
  
-    while (printf("> ") &&
+    while (printf("< ") && fflush(stdout) == 0 &&
            fgets(inputLine, sizeof(inputLine), stdin) &&
            strncmp(inputLine, "exit", 4) != 0)
     {
@@ -874,6 +902,11 @@ int main()
         /* ── Control systems ── */
         if (strncmp(inputLine, "pid",         3)  == 0)    { run_pid(inputLine + 3);       continue; }
  
+        /* ── Signal / FFT ── */
+        if (strncmp(inputLine, "load",        4)  == 0)    { run_load(inputLine + 4);      continue; }
+        if (strncmp(inputLine, "ifft",        4)  == 0)    { run_ifft(inputLine + 4);      continue; }
+        if (strncmp(inputLine, "fft",         3)  == 0)    { run_fft (inputLine + 3);      continue; } 
+
         /* ── Variable assignment: $name = rhs (but not $name == expr) ── */
 
         equalSign = strchr(inputLine, '=');
