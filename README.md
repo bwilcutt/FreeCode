@@ -4,12 +4,12 @@ This set of repositories contains finished and ongoing hobby projects I am worki
 Mathrix         - GUI interface for calc. Does graphing. Almost complete.
 
 calc            - Command-line algebraic parser. Started this as an interview "at home" project for Microchip. 
-                 I didn't get the job, but I got the itch! It is mostly complete and runs independently of Mathrix, which 
-                sits on top of it. If you download Mathrix, you'll need calc but not vice-versa.
+                 I didn't get the job, but I got the parsing itch! It is mostly complete and runs independently of Mathrix, 
+                 which sits on top of it. If you download Mathrix, you'll need calc but not vice-versa.
 
 canfs           - This is a J1939 CAN bus file system. Very unique. It maps data points to the file system (you can now cat 
-                  your data points to your screen), allows data point management, and extends to NETFS for security. Basically, this is
-                  MQTT-like (before MQTT existed), but it far exceeds MQTT (imho).
+                  your data points to your screen), allows data point management, and extends to NETFS for security. Basically, 
+                  this is MQTT-like (before MQTT existed), but it far exceeds MQTT (imho).
 
 encx24j600      - This is the Linux ethernet driver for anyone using ENCX24j600-based hardware. It has been fully tested and 
                   published under GPL in 2008.
