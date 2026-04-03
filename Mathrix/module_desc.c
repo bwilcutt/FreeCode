@@ -47,7 +47,7 @@ const ModuleDesc modules[] =
             { "Re", "Reynolds number", "", 0, "" },
         },
         1,
-        0, PLOT_NONE, NULL
+        1, PLOT_REYNOLDS, "Reynolds Number"
     },
 
     /* ── Manning's Equation ────────────────────────────────── */
@@ -104,7 +104,7 @@ const ModuleDesc modules[] =
             { "darcy_dP_rho", "ΔP/ρ",      "J/kg", 0, "" },
         },
         2,
-        0, PLOT_NONE, NULL
+        1, PLOT_DARCY, "Darcy-Weisbach"
     },
 
     /* ── Bernoulli ─────────────────────────────────────────── */
@@ -141,7 +141,7 @@ const ModuleDesc modules[] =
             { "bern_z2", "Elevation 2", "m",   0, "" },
         },
         6,
-        0, PLOT_NONE, NULL
+        1, PLOT_BERNOULLI, "Bernoulli's Equation"
     },
 
     /* ── Orifice Flow ──────────────────────────────────────── */
@@ -166,7 +166,7 @@ const ModuleDesc modules[] =
             { "orifice_V", "Velocity",  "m/s",  0, "" },
         },
         2,
-        0, PLOT_NONE, NULL
+        1, PLOT_ORIFICE, "Orifice Flow"
     },
 
     /* ── Beam Deflection ───────────────────────────────────── */

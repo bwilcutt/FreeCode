@@ -1,5 +1,5 @@
 #include "darcy.h"
- 
+
 /*************************************************************
  * Function:    run_darcy
  * Input:       args (const char*) — the portion of the input line following
@@ -11,7 +11,9 @@
  *              Parses four required named parameters (f, L, D, V) plus an optional
  *              unit system flag, validates that all inputs are positive, then
  *              computes the head loss (hf) and specific pressure loss (dP/rho).
- *              Results are stored in $darcy_hf and $darcy_dP_rho for further use.
+ *              Results are stored in $darcy_hf and $darcy_dP_rho.
+ *              Inputs are always stored in $darcy_f, $darcy_L, $darcy_D,
+ *              $darcy_V, $darcy_g so the GUI diagram can read them.
  **************************************************************/
 void run_darcy(const char *args)
 {
@@ -28,24 +30,26 @@ void run_darcy(const char *args)
     const char *unitLabel;
     double      headLoss;
     double      specificPressureLoss;
- 
-    frictionFactor = 0;
-    pipeLength     = 0;
-    pipeDiameter   = 0;
-    flowVelocity   = 0;
-    haveFriction   = 0;
-    haveLength     = 0;
-    haveDiameter   = 0;
-    haveVelocity   = 0;
-    useUsUnits     = args_have_us_units(args);
-    gravity        = useUsUnits ? 32.174 : 9.81;
-    unitLabel      = useUsUnits ? "US customary (ft, ft/s)" : "SI (m, m/s)";
- 
+
+    frictionFactor       = 0;
+    pipeLength           = 0;
+    pipeDiameter         = 0;
+    flowVelocity         = 0;
+    haveFriction         = 0;
+    haveLength           = 0;
+    haveDiameter         = 0;
+    haveVelocity         = 0;
+    useUsUnits           = args_have_us_units(args);
+    gravity              = useUsUnits ? 32.174 : 9.81;
+    unitLabel            = useUsUnits ? "US customary (ft, ft/s)" : "SI (m, m/s)";
+    headLoss             = 0;
+    specificPressureLoss = 0;
+
     parse_named_param(args, "f", &frictionFactor, &haveFriction);
     parse_named_param(args, "L", &pipeLength,     &haveLength);
     parse_named_param(args, "D", &pipeDiameter,   &haveDiameter);
     parse_named_param(args, "V", &flowVelocity,   &haveVelocity);
- 
+
     if (!haveFriction || !haveLength || !haveDiameter || !haveVelocity)
     {
         printf("  Usage: darcy f=<val> L=<val> D=<val> V=<val> [units=si|us]\n");
@@ -56,11 +60,11 @@ void run_darcy(const char *args)
     if (frictionFactor <= 0) { printf("  darcy: f must be > 0\n"); return; }
     if (pipeLength     <= 0) { printf("  darcy: L must be > 0\n"); return; }
     if (pipeDiameter   <= 0) { printf("  darcy: D must be > 0\n"); return; }
- 
-    headLoss            = frictionFactor * (pipeLength / pipeDiameter) *
-                          (flowVelocity * flowVelocity) / (2.0 * gravity);
+
+    headLoss             = frictionFactor * (pipeLength / pipeDiameter) *
+                           (flowVelocity * flowVelocity) / (2.0 * gravity);
     specificPressureLoss = headLoss * gravity;
- 
+
     printf("\n  Darcy-Weisbach — Pipe Head Loss  [%s]\n", unitLabel);
     printf("  ─────────────────────────────────────\n");
     printf("  Inputs\n");
@@ -71,8 +75,18 @@ void run_darcy(const char *args)
     printf("    g  (gravity)               = %g\n", gravity);
     printf("  Results\n");
     printf("    hf (head loss)             = %.4f\n", headLoss);
-    printf("    ΔP/ρ (specific press loss) = %.4f\n", specificPressureLoss);
+    printf("    \xce\x94P/\xcf\x81 (specific press loss) = %.4f\n", specificPressureLoss);
+
+    /* ── store inputs for GUI diagram ── */
+    set_var("darcy_f",   frictionFactor);
+    set_var("darcy_L",   pipeLength);
+    set_var("darcy_D",   pipeDiameter);
+    set_var("darcy_V",   flowVelocity);
+    set_var("darcy_g",   gravity);
+
+    /* ── store results ── */
     set_var("darcy_hf",     headLoss);
     set_var("darcy_dP_rho", specificPressureLoss);
+
     printf("  (results stored in $darcy_hf, $darcy_dP_rho)\n\n");
 }

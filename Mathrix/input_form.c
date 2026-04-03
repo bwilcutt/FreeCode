@@ -4,8 +4,12 @@
 #include "graph.h"
 #include "mohr_graph.h"
 #include "beam_graph.h"
-#include "pipe_mgr.h"
 #include "stress_graph.h"
+#include "reynolds_graph.h"
+#include "darcy_graph.h"
+#include "bernoulli_graph.h"
+#include "orifice_graph.h"
+#include "pipe_mgr.h"
 
 #include <gtk/gtk.h>
 #include <string.h>
@@ -31,14 +35,14 @@ static FormState g_form;
    FORWARD DECLARATIONS
    ═══════════════════════════════════════════════════════════ */
 
-static GtkWidget *build_param_row (GtkWidget *grid, int row,
-                                   const ParamDesc *p);
-static const char *read_widget    (GtkWidget *w, const ParamDesc *p,
-                                   char *buf, size_t buflen);
-static void on_run_clicked        (GtkButton *btn, gpointer user_data);
-static void on_plot_clicked       (GtkButton *btn, gpointer user_data);
-static void on_entry_activate     (GtkEntry  *entry, gpointer user_data);
-static void on_browse_clicked     (GtkButton *btn, gpointer user_data);
+static GtkWidget  *build_param_row (GtkWidget *grid, int row,
+                                    const ParamDesc *p);
+static const char *read_widget     (GtkWidget *w, const ParamDesc *p,
+                                    char *buf, size_t buflen);
+static void on_run_clicked         (GtkButton *btn, gpointer user_data);
+static void on_plot_clicked        (GtkButton *btn, gpointer user_data);
+static void on_entry_activate      (GtkEntry  *entry, gpointer user_data);
+static void on_browse_clicked      (GtkButton *btn, gpointer user_data);
 
 /* ═══════════════════════════════════════════════════════════
    PUBLIC — input_form_load
@@ -196,13 +200,13 @@ void input_form_load(const ModuleDesc *desc, GtkWidget *form_box)
  *************************************************************/
 void input_form_run(void)
 {
-    AppState    *st = app_state_get();
+    AppState         *st   = app_state_get();
     const ModuleDesc *desc = g_form.desc;
-    const char  *values[FORM_MAX_PARAMS];
-    char         val_bufs[FORM_MAX_PARAMS][128];
-    char         cmd[1024];
-    int          i;
-    int          ok = 1;
+    const char       *values[FORM_MAX_PARAMS];
+    char              val_bufs[FORM_MAX_PARAMS][128];
+    char              cmd[1024];
+    int               i;
+    int               ok = 1;
 
     if (!desc) return;
 
@@ -267,8 +271,127 @@ void input_form_plot(void)
         graph_window_open_beam();
     else if (desc->plot_type == PLOT_STRESS)
         graph_window_open_stress();
+    else if (desc->plot_type == PLOT_REYNOLDS)
+        graph_window_open_reynolds();
+    else if (desc->plot_type == PLOT_DARCY)
+        graph_window_open_darcy();    
+    else if (desc->plot_type == PLOT_BERNOULLI)
+        graph_window_open_bernoulli();            
+    else if (desc->plot_type == PLOT_ORIFICE)
+        graph_window_open_orifice();        
     else
         graph_window_open(desc);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PUBLIC — input_form_sync
+   ═══════════════════════════════════════════════════════════ */
+
+/*************************************************************
+ * Function:    input_form_sync
+ * Input:       void
+ * Output:      void
+ * Description: Reads stored parse variables for the active
+ *              module and populates the input form fields.
+ *              Called from main_gui.c after a command bar run.
+ *
+ *              For each PT_SCALAR/PT_STRING param, queries:
+ *                $<command>_<key>  e.g. $reynolds_V
+ *              If the variable is unknown or returns "0" for
+ *              an optional field that was not supplied, the
+ *              field is cleared so it does not show a stale 0.
+ *              For PT_CHOICE, the returned string is matched
+ *              against choices[] and the dropdown is updated.
+ *              PT_FLAG params are skipped.
+ *************************************************************/
+void input_form_sync(void)
+{
+    AppState         *st   = app_state_get();
+    const ModuleDesc *desc = g_form.desc;
+    char              var_cmd[64];
+    char              response[256];
+    char              val[64];
+    int               i;
+    int               j;
+
+    if (!desc) return;
+
+    for (i = 0; i < desc->n_params; i++)
+    {
+        GtkWidget       *w = g_form.widgets[i];
+        const ParamDesc *p = &desc->params[i];
+
+        if (!w) continue;
+        if (p->type == PT_FLAG) continue;
+
+        /* ── build parse query: $<command>_<key> ── */
+        snprintf(var_cmd, sizeof(var_cmd),
+                 "$%s_%s\n", desc->command, p->key);
+
+        if (!pipe_transact(var_cmd, response, sizeof(response)))
+            continue;
+
+        /* strip trailing whitespace/newline from response */
+        {
+            char *end = response + strlen(response) - 1;
+            while (end >= response &&
+                   (*end == '\n' || *end == '\r' || *end == ' '))
+                *end-- = '\0';
+        }
+
+        /* skip if parse returned an error (unknown variable) */
+        if (strncmp(response, "Unknown", 7) == 0) continue;
+
+        /* copy to val */
+        strncpy(val, response, sizeof(val) - 1);
+        val[sizeof(val) - 1] = '\0';
+
+        switch (p->type)
+        {
+            case PT_SCALAR:
+            case PT_STRING:
+            {
+                /* for optional fields, don't show "0" if not set */
+                if (!p->required &&
+                    strcmp(val, "0") == 0 &&
+                    strcmp(val, "0.0") == 0)
+                    gtk_editable_set_text(GTK_EDITABLE(w), "");
+                else
+                    gtk_editable_set_text(GTK_EDITABLE(w), val);
+                break;
+            }
+
+            case PT_CHOICE:
+            {
+                /* find matching choice and select it */
+                GListModel *model =
+                    gtk_drop_down_get_model(GTK_DROP_DOWN(w));
+                guint n_items = g_list_model_get_n_items(model);
+                for (j = 0; j < (int)n_items; j++)
+                {
+                    GObject *item = g_list_model_get_item(model, j);
+                    if (item)
+                    {
+                        const char *choice =
+                            gtk_string_object_get_string(
+                                GTK_STRING_OBJECT(item));
+                        if (strcmp(choice, val) == 0)
+                        {
+                            gtk_drop_down_set_selected(
+                                GTK_DROP_DOWN(w), (guint)j);
+                            g_object_unref(item);
+                            break;
+                        }
+                        g_object_unref(item);
+                    }
+                }
+                break;
+            }
+
+            case PT_FLAG:
+                break;  /* handled by continue above */
+        }
+    }
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -277,8 +400,8 @@ void input_form_plot(void)
 
 /*************************************************************
  * Function:    build_param_row
- * Input:       grid (GtkWidget*)    — the parameter grid
- *              row  (int)           — grid row index
+ * Input:       grid (GtkWidget*)       — the parameter grid
+ *              row  (int)              — grid row index
  *              p    (const ParamDesc*) — parameter descriptor
  * Output:      GtkWidget* — the input widget created for this row
  * Description: Adds a label in column 0 and an input widget in
@@ -332,7 +455,7 @@ static GtkWidget *build_param_row(GtkWidget *grid, int row,
             /* ── file param: add browse button beside entry ── */
             if (strcmp(p->key, "file") == 0)
             {
-                GtkWidget *hbox  = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+                GtkWidget *hbox   = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
                 GtkWidget *browse = gtk_button_new_with_label("📂");
                 gtk_widget_set_hexpand(entry, TRUE);
                 gtk_widget_add_css_class(browse, "mathrix-run-btn");
@@ -355,7 +478,7 @@ static GtkWidget *build_param_row(GtkWidget *grid, int row,
         {
             GtkStringList *list;
             GtkWidget     *drop;
-            int            n = 0;
+            int            n      = 0;
             int            def_idx = 0;
 
             /* count choices */
@@ -414,16 +537,16 @@ static GtkWidget *build_param_row(GtkWidget *grid, int row,
 
 /*************************************************************
  * Function:    read_widget
- * Input:       w      (GtkWidget*)      — the input widget
+ * Input:       w      (GtkWidget*)       — the input widget
  *              p      (const ParamDesc*) — its descriptor
- *              buf    (char*)           — scratch buffer
- *              buflen (size_t)          — buffer capacity
+ *              buf    (char*)            — scratch buffer
+ *              buflen (size_t)           — buffer capacity
  * Output:      const char* — the current value as a string,
  *              or NULL / "" if the field is empty
  * Description: Reads the current value from any of the four
  *              widget types and returns it as a C string.
  *              For PT_CHOICE the selected item text is returned.
- *              For PT_FLAG returns "1" or "" (empty = not set).
+ *              For PT_FLAG returns "us" or "" (empty = not set).
  *************************************************************/
 static const char *read_widget(GtkWidget *w, const ParamDesc *p,
                                 char *buf, size_t buflen)
@@ -444,11 +567,11 @@ static const char *read_widget(GtkWidget *w, const ParamDesc *p,
 
         case PT_CHOICE:
         {
-            guint       sel  = gtk_drop_down_get_selected(
-                                   GTK_DROP_DOWN(w));
-            GListModel *model= gtk_drop_down_get_model(
-                                   GTK_DROP_DOWN(w));
-            GObject    *item = g_list_model_get_item(model, sel);
+            guint       sel   = gtk_drop_down_get_selected(
+                                    GTK_DROP_DOWN(w));
+            GListModel *model = gtk_drop_down_get_model(
+                                    GTK_DROP_DOWN(w));
+            GObject    *item  = g_list_model_get_item(model, sel);
             if (item)
             {
                 strncpy(buf,
@@ -482,10 +605,6 @@ static const char *read_widget(GtkWidget *w, const ParamDesc *p,
 
 /*************************************************************
  * Function:    on_run_clicked
- * Input:       btn       (GtkButton*) — the Run button
- *              user_data (gpointer)   — unused
- * Output:      void
- * Description: Delegates to input_form_run().
  *************************************************************/
 static void on_run_clicked(GtkButton *btn, gpointer user_data)
 {
@@ -496,10 +615,6 @@ static void on_run_clicked(GtkButton *btn, gpointer user_data)
 
 /*************************************************************
  * Function:    on_plot_clicked
- * Input:       btn       (GtkButton*) — the Plot button
- *              user_data (gpointer)   — unused
- * Output:      void
- * Description: Delegates to input_form_plot().
  *************************************************************/
 static void on_plot_clicked(GtkButton *btn, gpointer user_data)
 {
@@ -510,12 +625,6 @@ static void on_plot_clicked(GtkButton *btn, gpointer user_data)
 
 /*************************************************************
  * Function:    on_file_chosen
- * Input:       dialog    (GtkFileDialog*) — the file dialog
- *              result    (GAsyncResult*)  — async result
- *              user_data (gpointer)       — the filename GtkEntry
- * Output:      void
- * Description: Async callback — receives the chosen file and
- *              sets the filename entry text to the chosen path.
  *************************************************************/
 static void on_file_chosen(GObject *dialog, GAsyncResult *result,
                             gpointer user_data)
@@ -541,11 +650,6 @@ static void on_file_chosen(GObject *dialog, GAsyncResult *result,
 
 /*************************************************************
  * Function:    on_browse_clicked
- * Input:       btn       (GtkButton*) — the browse button
- *              user_data (gpointer)   — the filename GtkEntry
- * Output:      void
- * Description: Opens a GtkFileDialog filtered to CSV files.
- *              On selection, on_file_chosen() sets the entry text.
  *************************************************************/
 static void on_browse_clicked(GtkButton *btn, gpointer user_data)
 {
@@ -565,8 +669,7 @@ static void on_browse_clicked(GtkButton *btn, gpointer user_data)
 
     filters = g_list_store_new(GTK_TYPE_FILE_FILTER);
     g_list_store_append(filters, filter);
-    gtk_file_dialog_set_filters(dialog,
-                                 G_LIST_MODEL(filters));
+    gtk_file_dialog_set_filters(dialog, G_LIST_MODEL(filters));
     g_object_unref(filters);
     g_object_unref(filter);
 
@@ -579,11 +682,6 @@ static void on_browse_clicked(GtkButton *btn, gpointer user_data)
 
 /*************************************************************
  * Function:    on_entry_activate
- * Input:       entry     (GtkEntry*) — the entry that fired
- *              user_data (gpointer)  — unused
- * Output:      void
- * Description: Pressing Enter in any parameter field triggers
- *              Run, matching the parse CLI behaviour.
  *************************************************************/
 static void on_entry_activate(GtkEntry *entry, gpointer user_data)
 {

@@ -1,6 +1,5 @@
 #include "reynolds.h"
-#include "parse.h"
- 
+
 /*************************************************************
  * Function:    run_reynolds
  * Input:       args (const char*) — the portion of the input line following
@@ -12,6 +11,10 @@
  *              Classifies the resulting flow regime as laminar (Re < 2300),
  *              transitional (2300-4000), or turbulent (> 4000).
  *              The computed Re is stored in $Re for further use.
+ *              Inputs are always stored in $reynolds_V, $reynolds_D,
+ *              $reynolds_nu, $reynolds_rho, $reynolds_mu (0 when not provided).
+ *              Flow regime is stored in $reynolds_regime:
+ *                0 = laminar, 1 = transitional, 2 = turbulent.
  **************************************************************/
 void run_reynolds(const char *args)
 {
@@ -26,8 +29,9 @@ void run_reynolds(const char *args)
     int         haveDensity;
     int         haveDynamicVisc;
     double      reynoldsNumber;
+    double      regimeCode;
     const char *flowRegime;
- 
+
     flowVelocity         = 0;
     characteristicLength = 0;
     kinematicViscosity   = 0;
@@ -39,14 +43,15 @@ void run_reynolds(const char *args)
     haveDensity          = 0;
     haveDynamicVisc      = 0;
     reynoldsNumber       = 0;
+    regimeCode           = 0;
     flowRegime           = NULL;
- 
+
     parse_named_param(args, "V",   &flowVelocity,         &haveVelocity);
     parse_named_param(args, "D",   &characteristicLength, &haveLength);
     parse_named_param(args, "nu",  &kinematicViscosity,   &haveKinematicVisc);
     parse_named_param(args, "rho", &fluidDensity,         &haveDensity);
     parse_named_param(args, "mu",  &dynamicViscosity,     &haveDynamicVisc);
- 
+
     if (!haveVelocity || !haveLength)
     {
         printf("  Usage: reynolds V=<val> D=<val> nu=<val>\n");
@@ -54,25 +59,38 @@ void run_reynolds(const char *args)
         printf("  Common nu (m²/s): water@20°C=1.004e-6, air@20°C=1.516e-5\n");
         return;
     }
- 
+
     if (haveKinematicVisc && kinematicViscosity > 0)
     {
         reynoldsNumber = flowVelocity * characteristicLength / kinematicViscosity;
     }
     else if (haveDensity && haveDynamicVisc && dynamicViscosity > 0)
     {
-        reynoldsNumber = fluidDensity * flowVelocity * characteristicLength / dynamicViscosity;
+        reynoldsNumber = fluidDensity * flowVelocity *
+                         characteristicLength / dynamicViscosity;
     }
     else
     {
         printf("  reynolds: provide nu=<kinematic viscosity>  OR  rho=<> mu=<>\n");
         return;
     }
- 
-    flowRegime = (reynoldsNumber < 2300) ? "laminar"
-               : (reynoldsNumber < 4000) ? "transitional"
-                                         : "turbulent";
- 
+
+    if (reynoldsNumber < 2300.0)
+    {
+        flowRegime = "laminar";
+        regimeCode = 0.0;
+    }
+    else if (reynoldsNumber < 4000.0)
+    {
+        flowRegime = "transitional";
+        regimeCode = 1.0;
+    }
+    else
+    {
+        flowRegime = "turbulent";
+        regimeCode = 2.0;
+    }
+
     printf("\n  Reynolds Number\n");
     printf("  ─────────────────────────────────────\n");
     printf("  Inputs\n");
@@ -86,8 +104,19 @@ void run_reynolds(const char *args)
         printf("    mu  (dynamic visc)          = %g\n", dynamicViscosity);
     }
     printf("  Result\n");
-    printf("    Re                          = %.2f  (%s)\n", reynoldsNumber, flowRegime);
-    set_var("Re", reynoldsNumber);
-    printf("  (result stored in $Re)\n\n");
+    printf("    Re                          = %.2f  (%s)\n",
+           reynoldsNumber, flowRegime);
+
+    /* ── store inputs for GUI diagram ── */
+    set_var("reynolds_V",      flowVelocity);
+    set_var("reynolds_D",      characteristicLength);
+    set_var("reynolds_nu",     haveKinematicVisc ? kinematicViscosity : 0.0);
+    set_var("reynolds_rho",    haveDensity       ? fluidDensity       : 0.0);
+    set_var("reynolds_mu",     haveDynamicVisc   ? dynamicViscosity   : 0.0);
+
+    /* ── store results ── */
+    set_var("Re",              reynoldsNumber);
+    set_var("reynolds_regime", regimeCode);
+
+    printf("  (result stored in $Re, $reynolds_regime)\n\n");
 }
- 

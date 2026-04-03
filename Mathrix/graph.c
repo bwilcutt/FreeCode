@@ -5,6 +5,10 @@
 #include "mohr_graph.h"
 #include "beam_graph.h"
 #include "stress_graph.h"
+#include "reynolds_graph.h"
+#include "darcy_graph.h"
+#include "bernoulli_graph.h"
+#include "orifice_graph.h"
 
 #include <gtk/gtk.h>
 #include <cairo.h>
@@ -200,10 +204,14 @@ void graph_window_open_vars(const char   *title,
     window = gtk_window_new();
     gtk_window_set_title(GTK_WINDOW(window), gd->title);
     gtk_window_set_default_size(GTK_WINDOW(window),
-                                 plot_type == PLOT_MOHR
-                                     ? GRAPH_MIN_W + 280
-                                     : GRAPH_MIN_W + 100,
-                                 GRAPH_MIN_H + 60);
+                                plot_type == PLOT_MOHR
+                                ? GRAPH_MIN_W + 280
+                                : plot_type == PLOT_BERNOULLI
+                                ? GRAPH_MIN_W + 200
+                                : GRAPH_MIN_W + 100,
+                                plot_type == PLOT_BERNOULLI
+                                ? GRAPH_MIN_H + 110
+                                : GRAPH_MIN_H + 60);
     gtk_window_set_transient_for(GTK_WINDOW(window),
                                   GTK_WINDOW(st->window));
     /* NOT modal — autonomous */
@@ -508,7 +516,15 @@ static void on_draw(GtkDrawingArea *da, cairo_t *cr,
     else if (gd->plot_type == PLOT_BEAM)
         draw_beam_plot(cr, w, h, gd);
     else if (gd->plot_type == PLOT_STRESS)
-        draw_stress_plot(cr, w, h, gd);        
+        draw_stress_plot(cr, w, h, gd);
+    else if (gd->plot_type == PLOT_REYNOLDS)
+        draw_reynolds_plot(cr, w, h, gd);
+    else if (gd->plot_type == PLOT_DARCY)
+        draw_darcy_plot(cr, w, h, gd); 
+    else if (gd->plot_type == PLOT_BERNOULLI)
+        draw_bernoulli_plot(cr, w, h, gd);    
+    else if (gd->plot_type == PLOT_ORIFICE)
+        draw_orifice_plot(cr, w, h, gd);                   
     else
         draw_line_plot(cr, w, h, gd);
 }

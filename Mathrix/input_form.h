@@ -61,4 +61,28 @@ void input_form_run(void);
  *************************************************************/
 void input_form_plot(void);
 
+/*************************************************************
+ * Function:    input_form_sync
+ * Input:       void
+ * Output:      void
+ * Description: Reads the stored parse variables for the active
+ *              module and populates the input form fields with
+ *              their current values.  Called from main_gui.c
+ *              after a command bar command runs, so that the
+ *              form always reflects the last computation
+ *              regardless of whether it was run from the form
+ *              or the command bar.
+ *
+ *              For each parameter, queries parse for:
+ *                $<command>_<key>   e.g. $reynolds_V
+ *              Special cases:
+ *                PT_CHOICE — matches the returned string against
+ *                            the choices[] list and selects it
+ *                PT_FLAG   — skipped (not a named parse variable)
+ *                PT_STRING — sets entry text directly
+ *              Parameters whose variable returns 0 or an error
+ *              are left unchanged so default values are preserved.
+ *************************************************************/
+void input_form_sync(void);
+
 #endif /* INPUT_FORM_H */

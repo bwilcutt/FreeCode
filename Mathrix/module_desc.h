@@ -78,7 +78,11 @@ typedef enum
     PLOT_XY,
     PLOT_MOHR,
     PLOT_BEAM,
-    PLOT_STRESS
+    PLOT_STRESS,
+    PLOT_REYNOLDS,
+    PLOT_DARCY,
+    PLOT_BERNOULLI,
+    PLOT_ORIFICE
 } PlotType;
 
 /* ═══════════════════════════════════════════════════════════
