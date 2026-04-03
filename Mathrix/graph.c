@@ -4,6 +4,7 @@
 #include "colors.h"
 #include "mohr_graph.h"
 #include "beam_graph.h"
+#include "stress_graph.h"
 
 #include <gtk/gtk.h>
 #include <cairo.h>
@@ -506,6 +507,8 @@ static void on_draw(GtkDrawingArea *da, cairo_t *cr,
         draw_mohr_plot(cr, w, h, gd);
     else if (gd->plot_type == PLOT_BEAM)
         draw_beam_plot(cr, w, h, gd);
+    else if (gd->plot_type == PLOT_STRESS)
+        draw_stress_plot(cr, w, h, gd);        
     else
         draw_line_plot(cr, w, h, gd);
 }

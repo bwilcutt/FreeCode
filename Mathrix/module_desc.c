@@ -200,6 +200,8 @@ const ModuleDesc modules[] =
         3,
         1, PLOT_BEAM, "Beam Deflection Diagram"
     },
+
+    /* ── Stress / Strain ───────────────────────────────────── */
     {
         "stress",
         "Axial Stress / Strain",
@@ -222,7 +224,7 @@ const ModuleDesc modules[] =
             { "stress_delta", "Deformation", "m",  0, "" },
         },
         3,
-        0, PLOT_NONE, NULL
+        1, PLOT_STRESS, "Axial Stress / Strain"
     },
 
     /* ── Mohr's Circle ─────────────────────────────────────── */

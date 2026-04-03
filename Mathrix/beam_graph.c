@@ -146,6 +146,10 @@ void draw_beam_plot(cairo_t *cr, int w, int h,
     double Mmax    = gd->y_data[1];
     double R       = gd->y_data[2];
 
+        /* DEBUG */
+    fprintf(stderr, "draw_beam_plot: L=%.3g P=%.3g w=%.3g cant=%d udl=%d delta=%.3g\n",
+            L, P, w_udl, is_cant, is_udl, delta);
+            
     /* ── panel background ── */
     cairo_set_source_rgb(cr, COL_PANEL_R, COL_PANEL_G, COL_PANEL_B);
     cairo_paint(cr);
@@ -483,7 +487,7 @@ void graph_window_open_beam(void)
     double    L, P, w_udl, is_cant, is_udl;
     double    delta, Mmax, R;
     double    x_data[5];
-    double    y_data[3];
+    double    y_data[5];
 
     pipe_transact("$beam_L\n",    buf, sizeof(buf)); L       = atof(buf);
     pipe_transact("$beam_P\n",    buf, sizeof(buf)); P       = atof(buf);
@@ -504,5 +508,5 @@ void graph_window_open_beam(void)
 
     graph_window_open_vars("Beam Deflection", PLOT_BEAM,
                            "", "",
-                           x_data, y_data, 3);
+                           x_data, y_data, 5);
 }

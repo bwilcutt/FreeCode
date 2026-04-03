@@ -5,6 +5,7 @@
 #include "mohr_graph.h"
 #include "beam_graph.h"
 #include "pipe_mgr.h"
+#include "stress_graph.h"
 
 #include <gtk/gtk.h>
 #include <string.h>
@@ -264,6 +265,8 @@ void input_form_plot(void)
         graph_window_open_mohr();
     else if (desc->plot_type == PLOT_BEAM)
         graph_window_open_beam();
+    else if (desc->plot_type == PLOT_STRESS)
+        graph_window_open_stress();
     else
         graph_window_open(desc);
 }

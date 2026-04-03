@@ -1,5 +1,5 @@
 #include "stress.h"
-
+ 
 /*************************************************************
  * Function:    run_stress
  * Input:       args (const char*) — the portion of the input line following
@@ -11,20 +11,22 @@
  *              epsilon = sigma/E.  If member length L is additionally provided,
  *              computes axial deformation delta = epsilon * L.
  *              Results are stored in $stress_sigma, $stress_eps, $stress_delta.
+ *              Inputs are always stored in $stress_F, $stress_A, $stress_E,
+ *              $stress_L (0 when not provided) so the GUI diagram can read them.
  **************************************************************/
 void run_stress(const char *args)
 {
-    double axialForce = 0;
-    double crossSectionArea = 0;
-    double youngsModulus = 0;
-    double memberLength = 0;
-    int    haveForce = 0;
-    int    haveArea = 0;
-    int    haveModulus = 0;
-    int    haveLength = 0;
-    double axialStress = 0;
-    double axialStrain = 0;
-    double axialDeformation = 0;
+    double axialForce        = 0;
+    double crossSectionArea  = 0;
+    double youngsModulus     = 0;
+    double memberLength      = 0;
+    int    haveForce         = 0;
+    int    haveArea          = 0;
+    int    haveModulus       = 0;
+    int    haveLength        = 0;
+    double axialStress       = 0;
+    double axialStrain       = 0;
+    double axialDeformation  = 0;
  
     parse_named_param(args, "F", &axialForce,       &haveForce);
     parse_named_param(args, "A", &crossSectionArea, &haveArea);
@@ -49,7 +51,17 @@ void run_stress(const char *args)
     printf("    A  (cross-section)    = %g\n", crossSectionArea);
     printf("  Results\n");
     printf("    sigma (axial stress)  = %.6g\n", axialStress);
+ 
+    /* ── always store inputs so GUI diagram can read them ── */
+    set_var("stress_F",     axialForce);
+    set_var("stress_A",     crossSectionArea);
+    set_var("stress_E",     haveModulus ? youngsModulus : 0.0);
+    set_var("stress_L",     haveLength  ? memberLength  : 0.0);
+ 
+    /* ── always store results (0 when not computed) ── */
     set_var("stress_sigma", axialStress);
+    set_var("stress_eps",   0.0);
+    set_var("stress_delta", 0.0);
  
     if (haveModulus && youngsModulus != 0)
     {
@@ -57,6 +69,7 @@ void run_stress(const char *args)
         printf("    E  (Young's modulus)  = %g\n", youngsModulus);
         printf("    eps (axial strain)    = %.6g\n", axialStrain);
         set_var("stress_eps", axialStrain);
+ 
         if (haveLength)
         {
             axialDeformation = axialStrain * memberLength;
@@ -67,7 +80,7 @@ void run_stress(const char *args)
     }
  
     printf("  (results stored in $stress_sigma");
-    if (haveModulus && youngsModulus != 0)         printf(", $stress_eps");
+    if (haveModulus && youngsModulus != 0)              printf(", $stress_eps");
     if (haveModulus && youngsModulus != 0 && haveLength) printf(", $stress_delta");
     printf(")\n\n");
 }
