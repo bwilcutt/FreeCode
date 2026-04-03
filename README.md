@@ -9,7 +9,8 @@ calc            - Command-line algebraic parser. Started this as an interview "a
 
 canfs           - This is a J1939 CAN bus file system. Very unique. It maps data points to the file system (you can now cat 
                   your data points to your screen), allows data point management, and extends to NETFS for security. Basically, 
-                  this is MQTT-like (before MQTT existed), but it far exceeds MQTT (imho).
+                  this is MQTT-like (before MQTT existed), but it far exceeds MQTT (imho).  It is based on FUSE for Linux,
+                  so make sure you've "sudo apt install fuse3 libfuse3-dev" on your system or you'll be sucking wind!
 
 encx24j600      - This is the Linux ethernet driver for anyone using ENCX24j600-based hardware. It has been fully tested and 
                   published under GPL in 2008.
