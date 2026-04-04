@@ -82,7 +82,11 @@ typedef enum
     PLOT_REYNOLDS,
     PLOT_DARCY,
     PLOT_BERNOULLI,
-    PLOT_ORIFICE
+    PLOT_ORIFICE,
+    PLOT_IDEALGAS,
+    PLOT_HEATCOND,
+    PLOT_SPECHEAT,
+    PLOT_MANNING
 } PlotType;
 
 /* ═══════════════════════════════════════════════════════════

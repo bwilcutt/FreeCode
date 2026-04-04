@@ -9,6 +9,10 @@
 #include "darcy_graph.h"
 #include "bernoulli_graph.h"
 #include "orifice_graph.h"
+#include "specheat_graph.h"
+#include "idealgas_graph.h"
+#include "heatcond_graph.h"
+#include "manning_graph.h"
 #include "pipe_mgr.h"
 
 #include <gtk/gtk.h>
@@ -265,22 +269,20 @@ void input_form_plot(void)
 
     input_form_run();
 
-    if (desc->plot_type == PLOT_MOHR)
-        graph_window_open_mohr();
-    else if (desc->plot_type == PLOT_BEAM)
-        graph_window_open_beam();
-    else if (desc->plot_type == PLOT_STRESS)
-        graph_window_open_stress();
-    else if (desc->plot_type == PLOT_REYNOLDS)
-        graph_window_open_reynolds();
-    else if (desc->plot_type == PLOT_DARCY)
-        graph_window_open_darcy();    
-    else if (desc->plot_type == PLOT_BERNOULLI)
-        graph_window_open_bernoulli();            
-    else if (desc->plot_type == PLOT_ORIFICE)
-        graph_window_open_orifice();        
-    else
-        graph_window_open(desc);
+    /* Diagram the specific plot type */
+
+    if      (desc->plot_type == PLOT_MOHR)      graph_window_open_mohr();
+    else if (desc->plot_type == PLOT_BEAM)      graph_window_open_beam();
+    else if (desc->plot_type == PLOT_STRESS)    graph_window_open_stress();
+    else if (desc->plot_type == PLOT_REYNOLDS)  graph_window_open_reynolds();
+    else if (desc->plot_type == PLOT_DARCY)     graph_window_open_darcy();
+    else if (desc->plot_type == PLOT_BERNOULLI) graph_window_open_bernoulli();
+    else if (desc->plot_type == PLOT_ORIFICE)   graph_window_open_orifice();
+    else if (desc->plot_type == PLOT_IDEALGAS)  graph_window_open_idealgas();
+    else if (desc->plot_type == PLOT_HEATCOND)  graph_window_open_heatcond();
+    else if (desc->plot_type == PLOT_SPECHEAT)  graph_window_open_specheat();
+    else if (desc->plot_type == PLOT_MANNING)   graph_window_open_manning();    
+    else                                        graph_window_open(desc);
 }
 
 /* ═══════════════════════════════════════════════════════════

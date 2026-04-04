@@ -9,7 +9,10 @@
 #include "darcy_graph.h"
 #include "bernoulli_graph.h"
 #include "orifice_graph.h"
-
+#include "idealgas_graph.h"
+#include "specheat_graph.h"
+#include "heatcond_graph.h"
+#include "manning_graph.h"
 #include <gtk/gtk.h>
 #include <cairo.h>
 #include <math.h>
@@ -525,6 +528,14 @@ static void on_draw(GtkDrawingArea *da, cairo_t *cr,
         draw_bernoulli_plot(cr, w, h, gd);    
     else if (gd->plot_type == PLOT_ORIFICE)
         draw_orifice_plot(cr, w, h, gd);                   
+    else if (gd->plot_type == PLOT_IDEALGAS)
+        draw_idealgas_plot(cr, w, h, gd);                   
+    else if (gd->plot_type == PLOT_HEATCOND)
+        draw_heatcond_plot(cr, w, h, gd);                   
+    else if (gd->plot_type == PLOT_SPECHEAT)
+        draw_specheat_plot(cr, w, h, gd);  
+    else if (gd->plot_type == PLOT_MANNING)
+        draw_manning_plot(cr, w, h, gd);                         
     else
         draw_line_plot(cr, w, h, gd);
 }

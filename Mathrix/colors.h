@@ -154,6 +154,7 @@
 #define MX_RED_R             0.929
 #define MX_RED_G             0.529
 #define MX_RED_B             0.588
+#define MX_BLACK            "#000000"
 
 /* ═══════════════════════════════════════════════════════════
    SEMANTIC ALIASES

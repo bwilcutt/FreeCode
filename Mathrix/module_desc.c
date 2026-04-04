@@ -12,7 +12,7 @@ static const char *beam_type_choices[]  = { "ss", "cant", NULL };
 static const char *beam_load_choices[]  = { "point", "udl", NULL };
 static const char *bern_solve_choices[] = { "P1","V1","z1","P2","V2","z2", NULL };
 static const char *gas_solve_choices[]  = { "P", "V", "n", "T", NULL };
-static const char *heat_solve_choices[] = { "Q", "m", "c", "dT", NULL };
+static const char *heat_solve_choices[] = { "Q", "k", "A", "L", "T1", "T2", NULL };
 static const char *pid_mode_choices[]   = { "sim", "step", "tune", "reset", NULL };
 static const char *pid_type_choices[]   = { "PID", "PI", "P", NULL };
 static const char *pid_method_choices[] = { "zn", "znol", "cc", NULL };
@@ -77,7 +77,7 @@ const ModuleDesc modules[] =
             { "manning_Fr", "Froude number", "",     0, "" },
         },
         3,
-        0, PLOT_NONE, NULL
+        1, PLOT_MANNING, "Manning's Equation"
     },
 
     /* ── Darcy-Weisbach ────────────────────────────────────── */
@@ -280,40 +280,49 @@ const ModuleDesc modules[] =
             { "gas_T", "Temperature", "K",   0, "" },
         },
         4,
-        0, PLOT_NONE, NULL
+        1, PLOT_IDEALGAS, "Ideal Gas Law"
     },
 
-    /* ── Heat Conduction ───────────────────────────────────── */
+
+/* ── Heat Conduction ───────────────────────────────────── */
+{
+    "heatcond",
+    "Heat Conduction",
+    "Thermodynamics",
+    "Fourier's Law: steady-state conduction through a slab  Q = kA(T1-T2)/L",
     {
-        "conduction",
-        "Heat Conduction",
-        "Thermodynamics",
-        "Fourier's Law: steady-state conduction through a slab",
-        {
-            { "k",     "Conductivity",    "W/m·K", PT_SCALAR, NULL, NULL, 1,
-              "Thermal conductivity of the material" },
-            { "A",     "Area",            "m²",    PT_SCALAR, NULL, NULL, 1,
-              "Cross-sectional area perpendicular to heat flow" },
-            { "dT",    "Temp difference", "K",     PT_SCALAR, NULL, NULL, 1,
-              "Temperature difference across the slab" },
-            { "L",     "Thickness",       "m",     PT_SCALAR, NULL, NULL, 1,
-              "Slab thickness in direction of heat flow" },
-            { "units", "Unit system",     "",      PT_CHOICE, units_choices, "si", 0,
-              "SI or US customary" },
-        },
-        5,
-        {
-            { "cond_Q",    "Heat flow rate", "W",    0, "" },
-            { "cond_flux", "Heat flux",      "W/m²", 0, "" },
-            { "cond_Rth",  "Thermal resist", "K/W",  0, "" },
-        },
-        3,
-        0, PLOT_NONE, NULL
+        { "k",     "Conductivity",      "W/m·K", PT_SCALAR, NULL,         NULL, 1,
+          "Thermal conductivity (copper=385, steel=50, glass=1.05, wood=0.12)" },
+        { "A",     "Area",              "m²",    PT_SCALAR, NULL,         NULL, 1,
+          "Cross-sectional area perpendicular to heat flow" },
+        { "L",     "Thickness",         "m",     PT_SCALAR, NULL,         NULL, 1,
+          "Slab thickness in direction of heat flow" },
+        { "T1",    "Hot-face temp",     "K",     PT_SCALAR, NULL,         NULL, 1,
+          "Temperature of the hot face" },
+        { "T2",    "Cold-face temp",    "K",     PT_SCALAR, NULL,         NULL, 1,
+          "Temperature of the cold face" },
+        { "units", "Unit system",       "",      PT_CHOICE, units_choices, "si", 0,
+          "SI or US customary" },
+        { "solve", "Solve for",         "",      PT_CHOICE, heat_solve_choices, "Q", 0,
+          "Leave blank to compute Q, or pick a variable to solve for" },
     },
-
+    7,
+    {
+        { "heatcond_Q",   "Heat flow rate",    "W",    0, "" },
+        { "heatcond_q",   "Heat flux",         "W/m²", 0, "" },
+        { "heatcond_Rth", "Thermal resistance","K/W",  0, "" },
+        { "heatcond_k",   "Conductivity",      "W/m·K",0, "" },
+        { "heatcond_A",   "Area",              "m²",   0, "" },
+        { "heatcond_L",   "Thickness",         "m",    0, "" },
+        { "heatcond_T1",  "Hot-face temp",     "K",    0, "" },
+        { "heatcond_T2",  "Cold-face temp",    "K",    0, "" },
+    },
+    8,
+    1, PLOT_HEATCOND, "Heat Conduction"
+},
     /* ── Specific Heat ─────────────────────────────────────── */
     {
-        "specificheat",
+        "specheat",
         "Specific Heat",
         "Thermodynamics",
         "Q = m·c·ΔT — solve for any variable",
@@ -337,7 +346,7 @@ const ModuleDesc modules[] =
             { "heat_dT", "Temp change",  "K",      0, "" },
         },
         4,
-        0, PLOT_NONE, NULL
+        1, PLOT_SPECHEAT, "Specific Heat "
     },
 
     /* ── PID Controller ────────────────────────────────────── */

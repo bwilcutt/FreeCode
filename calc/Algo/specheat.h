@@ -3,6 +3,6 @@
 
 #include "parse.h"
 
-void run_specificheat(const char *args);
+void run_specheat(const char *args);
 
 #endif

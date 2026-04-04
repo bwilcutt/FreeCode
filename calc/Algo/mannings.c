@@ -108,8 +108,15 @@ void run_manning(const char *args)
         printf("    S (slope)         = %g  (1 in %g)\n", channelSlope, 1.0 / channelSlope);
         printf("  Results\n");
         printf("    V (velocity)      = %.4f\n", flowVelocity);
+        
         set_var("manning_V", flowVelocity);
-    
+        set_var("manning_n", roughnessCoeff);
+        set_var("manning_R", hydraulicRadius);
+        set_var("manning_S", channelSlope);
+        set_var("manning_A", flowArea);
+        set_var("manning_D", hydraulicDepth);
+        set_var("manning_k", unitConvFactor);
+
         if (haveArea && flowArea > 0)
         {
             discharge = flowVelocity * flowArea;

@@ -4,7 +4,7 @@
         {
             "label": "build",
             "type": "shell",
-            "command": "gcc $(pkg-config --cflags gtk4) -g main_gui.c app_state.c module_desc.c input_form.c graph.c mohr_graph.c beam_graph.c stress_graph.c reynolds_graph.c darcy_graph.c bernoulli_graph.c orifice_graph.c ../calc/PipeMgr/pipe_mgr.c -I. -I../calc/PipeMgr -I../calc/Algo $(pkg-config --libs gtk4) -lm -o mathrix",
+            "command": "gcc $(pkg-config --cflags gtk4) -g main_gui.c app_state.c module_desc.c input_form.c graph.c mohr_graph.c beam_graph.c stress_graph.c reynolds_graph.c darcy_graph.c bernoulli_graph.c orifice_graph.c idealgas_graph.c heatcond_graph.c specheat_graph.c manning_graph.c ../calc/PipeMgr/pipe_mgr.c -I. -I../calc/PipeMgr -I../calc/Algo $(pkg-config --libs gtk4) -lm -o mathrix",
             "problemMatcher": ["$gcc"],
             "group": {
                 "kind": "build",

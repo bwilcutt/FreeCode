@@ -21,7 +21,7 @@
                 "Algo/orifice.c",
                 "Algo/stress.c",
                 "Algo/idealgas.c",
-                "Algo/conduct.c",
+                "Algo/heatcond.c",
                 "Algo/pid.c",
                 "Algo/fft.c",
                 "-I", ".",

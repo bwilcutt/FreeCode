@@ -6,6 +6,7 @@
 #include <string.h>
 #include <math.h>
 #include <ctype.h>
+#include "parse.h"
 
 extern void run_reynolds(const char *args);
 

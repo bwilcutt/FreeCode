@@ -11,7 +11,7 @@
 #include "orifice.h"
 #include "stress.h"
 #include "idealgas.h"
-#include "conduct.h"
+#include "heatcond.h"
 #include "pid.h"
 #include "csv.h"
 #include "fft.h"
@@ -717,12 +717,12 @@ void print_help()
         "    -> stores $gas_P, $gas_V, $gas_n, $gas_T\n"
         "\n"
         "  Heat Conduction  (Fourier's Law)\n"
-        "    conduction k=<> A=<> dT=<> L=<> [units=si|us]\n"
+        "    heatcond k=<> A=<> dT=<> L=<> [units=si|us]\n"
         "    -> stores $cond_Q, $cond_flux, $cond_Rth\n"
         "\n"
         "  Specific Heat  (Q = mc * dT)\n"
-        "    specificheat m=<> c=<> dT=<>             (solves Q)\n"
-        "    specificheat solve=<Q|m|c|dT> ...        (solve for any variable)\n"
+        "    specheat m=<> c=<> dT=<>             (solves Q)\n"
+        "    specheat solve=<Q|m|c|dT> ...        (solve for any variable)\n"
         "    -> stores $heat_Q, $heat_m, $heat_c, $heat_dT\n"
         "\n"
         "  ── Control Systems ───────────────────────────────────\n"
@@ -899,9 +899,9 @@ int main()
         if (strncmp(inputLine, "beam",        4)  == 0)    { run_beam(inputLine + 4);      continue; }
  
         /* ── Thermodynamics ── */
-        if (strncmp(inputLine, "specificheat", 12) == 0)   { run_specificheat(inputLine + 12); continue; }
+        if (strncmp(inputLine, "specheat",    8)  == 0)     { run_specheat(inputLine + 8); continue; }
         if (strncmp(inputLine, "idealgas",    8)  == 0)    { run_idealgas(inputLine + 8);  continue; }
-        if (strncmp(inputLine, "conduction",  10) == 0)    { run_conduction(inputLine + 10); continue; }
+        if (strncmp(inputLine, "heatcond",    8)  == 0)     { run_heatcond(inputLine + 8); continue; }
 
         /* ── Control systems ── */
         if (strncmp(inputLine, "pid",         3)  == 0)    { run_pid(inputLine + 3);       continue; }

@@ -1,7 +1,7 @@
 #include "specheat.h"
  
 /*************************************************************
- * Function:    run_specificheat
+ * Function:    run_specheat
  * Input:       args (const char*) — the portion of the input line following
  *              the "specificheat" command keyword; contains named parameters
  *              Q=<val>, m=<val>, c=<val>, dT=<val> and an optional
@@ -13,7 +13,7 @@
  *              Validates that divisor variables are non-zero before solving.
  *              Results are stored in $heat_Q, $heat_m, $heat_c, and $heat_dT.
  **************************************************************/
-void run_specificheat(const char *args)
+void run_specheat(const char *args)
 {
     double heatEnergy;
     double mass;
