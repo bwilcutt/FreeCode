@@ -1,0 +1,11 @@
+Package: mathrix
+Version: 1.0.0
+Section: utils
+Priority: optional
+Architecture: amd64
+Maintainer: Bryan Wilcutt <bwilcutt@yahoo.com>
+Description: Mathematical diagramming tool that uses an autonomous math
+ parser called Parser.  This is an engineering solver and a fancy calculator!
+ Supports scalar/matrix math, hydraulics, fluid mechanics,
+ structural mechanics, thermodynamics, control systems, FFT, and more.
+

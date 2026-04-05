@@ -119,8 +119,9 @@ double parse_factor()
         if (strcmp(funcName, "tan")  == 0) return tan(argValue);
         if (strcmp(funcName, "sqrt") == 0) return sqrt(argValue);
         if (strcmp(funcName, "abs")  == 0) return fabs(argValue);
-        if (strcmp(funcName, "log")  == 0) return log(argValue);
-        if (strcmp(funcName, "exp")  == 0) return exp(argValue);
+        if (strcmp(funcName, "log")   == 0) return log(argValue);
+        if (strcmp(funcName, "log10") == 0) return log10(argValue);
+        if (strcmp(funcName, "exp")   == 0) return exp(argValue);
         if (strcmp(funcName, "floor")== 0) return floor(argValue);
         if (strcmp(funcName, "ceil") == 0) return ceil(argValue);
         printf("Unknown function: %s\n", funcName);
@@ -137,11 +138,34 @@ double parse_factor()
 }
  
 /*************************************************************
+ * Function:    parse_power
+ * Input:       void — reads from the global cursor expr
+ * Output:      double — the value of a base^exponent expression at expr
+ * Description: Handles the right-associative '^' exponentiation operator at
+ *              higher precedence than '*' and '/'.  Calls parse_factor() for
+ *              the base, then recurses into itself for the exponent so that
+ *              2^3^2 evaluates as 2^(3^2) = 512, matching math convention.
+ *              Advances expr past all consumed characters.
+ **************************************************************/
+double parse_power()
+{
+    double base = parse_factor();
+    while (isspace(*expr)) expr++;
+    if (*expr == '^')
+    {
+        expr++;
+        double exp = parse_power();   /* right-associative: recurse */
+        return pow(base, exp);
+    }
+    return base;
+}
+
+/*************************************************************
  * Function:    parse_term
  * Input:       void — reads from the global cursor expr
  * Output:      double — the value of the multiplicative sub-expression at expr
  * Description: Handles left-associative '*' and '/' operators at medium
- *              precedence by repeatedly calling parse_factor() for each operand.
+ *              precedence by repeatedly calling parse_power() for each operand.
  *              Advances expr past all consumed characters.
  **************************************************************/
 double parse_term()
@@ -150,12 +174,12 @@ double parse_term()
     char   operatorChar;
     double rightOperand;
  
-    result = parse_factor();
+    result = parse_power();
     while (isspace(*expr)) expr++;
     while (*expr == '*' || *expr == '/')
     {
         operatorChar = *expr++;
-        rightOperand = parse_factor();
+        rightOperand = parse_power();
         result = (operatorChar == '*') ? result * rightOperand
                                        : result / rightOperand;
         while (isspace(*expr)) expr++;

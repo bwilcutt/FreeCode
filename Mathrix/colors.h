@@ -17,10 +17,6 @@
  * To change the theme, edit only this file.
  *************************************************************/
 
-/* ═══════════════════════════════════════════════════════════
-   BASE SURFACES
-   ═══════════════════════════════════════════════════════════ */
-
 /* Crust — darkest background, titlebar */
 #define MX_CRUST            "#181926"
 #define MX_CRUST_R           0.094
@@ -57,10 +53,6 @@
 #define MX_SURFACE2_G        0.376
 #define MX_SURFACE2_B        0.471
 
-/* ═══════════════════════════════════════════════════════════
-   TEXT
-   ═══════════════════════════════════════════════════════════ */
-
 /* Text — primary text, input values */
 #define MX_TEXT             "#cad3f5"
 #define MX_TEXT_R            0.792
@@ -96,10 +88,6 @@
 #define MX_OVERLAY0_R        0.431
 #define MX_OVERLAY0_G        0.451
 #define MX_OVERLAY0_B        0.553
-
-/* ═══════════════════════════════════════════════════════════
-   ACCENT COLORS
-   ═══════════════════════════════════════════════════════════ */
 
 /* Blue — primary accent, form titles, headerbar text, Run button */
 #define MX_BLUE             "#8aadf4"
@@ -155,13 +143,6 @@
 #define MX_RED_G             0.529
 #define MX_RED_B             0.588
 #define MX_BLACK            "#000000"
-
-/* ═══════════════════════════════════════════════════════════
-   SEMANTIC ALIASES
-   Names by role rather than hue — use these in code so that
-   a theme change only requires updating the alias, not every
-   usage site.
-   ═══════════════════════════════════════════════════════════ */
 
 /* Window / panel backgrounds */
 #define MX_WIN_BG           MX_BASE
