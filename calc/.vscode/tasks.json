@@ -10,6 +10,7 @@
                 "parse.c",
                 "csv.c",
 				"dump.c",
+                "mathfuncs.c"
                 "Algo/matrix.c",
                 "Algo/reynolds.c",
                 "Algo/mannings.c",

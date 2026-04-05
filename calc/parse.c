@@ -1,5 +1,5 @@
+#define _GNU_SOURCE
 #include "parse.h"
-#include "scalar.h"
 #include "matrix.h"
 #include "reynolds.h"
 #include "mannings.h"
@@ -16,6 +16,7 @@
 #include "csv.h"
 #include "fft.h"
 #include "dump.h"
+#include "mathfuncs.h"
 
 Variable   *vars = NULL;
 const char *expr;
@@ -83,11 +84,13 @@ double get_var(const char *name)
 double parse_factor()
 {
     char   name[32];
-    char   funcName[16];
+    char   funcName[32];   /* enlarged: longest new name is "vmedian" */
     int    charIdx;
     double argValue;
+    double arg2, arg3;
     char  *parseEnd;
     double result;
+    Matrix *mv;
  
     while (isspace(*expr)) expr++;
  
@@ -112,18 +115,173 @@ double parse_factor()
     {
         charIdx = 0;
         memset(funcName, 0, sizeof(funcName));
-        while (isalpha(*expr)) funcName[charIdx++] = *expr++;
+        while (isalpha(*expr) || *expr == '_') funcName[charIdx++] = *expr++;
+
+        /* ── two-argument scalar functions ── */
+        /* These read their own '(' arg1 , arg2 ')' to avoid parse_factor()
+           consuming the opening paren as a sub-expression.              */
+        if (strcmp(funcName, "atan2") == 0 ||
+            strcmp(funcName, "pow")   == 0 ||
+            strcmp(funcName, "mod")   == 0 ||
+            strcmp(funcName, "min")   == 0 ||
+            strcmp(funcName, "max")   == 0 ||
+            strcmp(funcName, "hypot") == 0)
+        {
+            while (isspace(*expr)) expr++;
+            if (*expr == '(') expr++;
+            argValue = parse_comparison();
+            while (isspace(*expr)) expr++;
+            if (*expr == ',') expr++;
+            arg2 = parse_comparison();
+            while (isspace(*expr)) expr++;
+            if (*expr == ')') expr++;
+
+            if (strcmp(funcName, "atan2") == 0) return atan2(argValue, arg2);
+            if (strcmp(funcName, "pow")   == 0) return pow(argValue, arg2);
+            if (strcmp(funcName, "mod")   == 0) return fmod(argValue, arg2);
+            if (strcmp(funcName, "min")   == 0) return (argValue < arg2) ? argValue : arg2;
+            if (strcmp(funcName, "max")   == 0) return (argValue > arg2) ? argValue : arg2;
+            if (strcmp(funcName, "hypot") == 0) return hypot(argValue, arg2);
+        }
+
+        /* ── three-argument scalar functions ── */
+        if (strcmp(funcName, "clamp") == 0)
+        {
+            while (isspace(*expr)) expr++;
+            if (*expr == '(') expr++;
+            argValue = parse_comparison();
+            while (isspace(*expr)) expr++;
+            if (*expr == ',') expr++;
+            arg2 = parse_comparison();
+            while (isspace(*expr)) expr++;
+            if (*expr == ',') expr++;
+            arg3 = parse_comparison();
+            while (isspace(*expr)) expr++;
+            if (*expr == ')') expr++;
+            if (argValue < arg2) return arg2;
+            if (argValue > arg3) return arg3;
+            return argValue;
+        }
+
+        /* ── vector -> scalar functions  (argument must be $varname) ── */
+        if (strcmp(funcName, "vsum")    == 0 ||
+            strcmp(funcName, "vmean")   == 0 ||
+            strcmp(funcName, "vmedian") == 0 ||
+            strcmp(funcName, "vstd")    == 0 ||
+            strcmp(funcName, "vvar")    == 0 ||
+            strcmp(funcName, "vmin")    == 0 ||
+            strcmp(funcName, "vmax")    == 0 ||
+            strcmp(funcName, "vnorm")   == 0 ||
+            strcmp(funcName, "vlen")    == 0)
+        {
+            while (isspace(*expr)) expr++;
+            if (*expr == '(') expr++;
+            while (isspace(*expr)) expr++;
+            if (*expr == '$') expr++;   /* skip leading $ */
+            charIdx = 0;
+            memset(name, 0, sizeof(name));
+            while (isalnum(*expr) || *expr == '_') name[charIdx++] = *expr++;
+            while (isspace(*expr)) expr++;
+            if (*expr == ')') expr++;
+
+            mv = get_mat_var(name);
+            if (!mv) { printf("%s: unknown matrix variable $%s\n", funcName, name); return 0.0; }
+
+            if (strcmp(funcName, "vsum")    == 0) return vf_sum(mv);
+            if (strcmp(funcName, "vmean")   == 0) return vf_mean(mv);
+            if (strcmp(funcName, "vmedian") == 0) return vf_median(mv);
+            if (strcmp(funcName, "vstd")    == 0) return vf_std(mv);
+            if (strcmp(funcName, "vvar")    == 0) return vf_var(mv);
+            if (strcmp(funcName, "vmin")    == 0) return vf_min(mv);
+            if (strcmp(funcName, "vmax")    == 0) return vf_max(mv);
+            if (strcmp(funcName, "vnorm")   == 0) return vf_norm(mv);
+            if (strcmp(funcName, "vlen")    == 0) return (double)(mv->rows * mv->cols);
+        }
+
+        /* ── interp($xv, $yv, x) ── */
+        if (strcmp(funcName, "interp") == 0)
+        {
+            char name2[32];
+            Matrix *xv, *yv;
+            double  xq;
+            int     ci;
+
+            while (isspace(*expr)) expr++;
+            if (*expr == '(') expr++;
+            while (isspace(*expr)) expr++;
+            if (*expr == '$') expr++;
+            ci = 0; memset(name,  0, sizeof(name));
+            while (isalnum(*expr) || *expr == '_') name[ci++]  = *expr++;
+            while (isspace(*expr)) expr++;
+            if (*expr == ',') expr++;
+            while (isspace(*expr)) expr++;
+            if (*expr == '$') expr++;
+            ci = 0; memset(name2, 0, sizeof(name2));
+            while (isalnum(*expr) || *expr == '_') name2[ci++] = *expr++;
+            while (isspace(*expr)) expr++;
+            if (*expr == ',') expr++;
+            xq = parse_comparison();
+            while (isspace(*expr)) expr++;
+            if (*expr == ')') expr++;
+
+            xv = get_mat_var(name);
+            yv = get_mat_var(name2);
+            if (!xv || !yv) { printf("interp: unknown variable\n"); return 0.0; }
+            return vf_interp(xv, yv, xq);
+        }
+
+        /* ── single-argument functions (original + new) ── */
+        /* parse_factor() naturally consumes the parenthesised argument */
         argValue = parse_factor();
-        if (strcmp(funcName, "sin")  == 0) return sin(argValue);
-        if (strcmp(funcName, "cos")  == 0) return cos(argValue);
-        if (strcmp(funcName, "tan")  == 0) return tan(argValue);
-        if (strcmp(funcName, "sqrt") == 0) return sqrt(argValue);
-        if (strcmp(funcName, "abs")  == 0) return fabs(argValue);
+
+        /* original */
+        if (strcmp(funcName, "sin")   == 0) return sin(argValue);
+        if (strcmp(funcName, "cos")   == 0) return cos(argValue);
+        if (strcmp(funcName, "tan")   == 0) return tan(argValue);
+        if (strcmp(funcName, "sqrt")  == 0) return sqrt(argValue);
+        if (strcmp(funcName, "abs")   == 0) return fabs(argValue);
         if (strcmp(funcName, "log")   == 0) return log(argValue);
         if (strcmp(funcName, "log10") == 0) return log10(argValue);
         if (strcmp(funcName, "exp")   == 0) return exp(argValue);
-        if (strcmp(funcName, "floor")== 0) return floor(argValue);
-        if (strcmp(funcName, "ceil") == 0) return ceil(argValue);
+        if (strcmp(funcName, "floor") == 0) return floor(argValue);
+        if (strcmp(funcName, "ceil")  == 0) return ceil(argValue);
+
+        /* inverse trig */
+        if (strcmp(funcName, "asin")  == 0) return asin(argValue);
+        if (strcmp(funcName, "acos")  == 0) return acos(argValue);
+        if (strcmp(funcName, "atan")  == 0) return atan(argValue);
+
+        /* hyperbolic */
+        if (strcmp(funcName, "sinh")  == 0) return sinh(argValue);
+        if (strcmp(funcName, "cosh")  == 0) return cosh(argValue);
+        if (strcmp(funcName, "tanh")  == 0) return tanh(argValue);
+
+        /* inverse hyperbolic */
+        if (strcmp(funcName, "asinh") == 0) return asinh(argValue);
+        if (strcmp(funcName, "acosh") == 0) return acosh(argValue);
+        if (strcmp(funcName, "atanh") == 0) return atanh(argValue);
+
+        /* angle conversion */
+        if (strcmp(funcName, "deg")   == 0) return argValue * (180.0 / M_PI);
+        if (strcmp(funcName, "rad")   == 0) return argValue * (M_PI  / 180.0);
+
+        /* rounding */
+        if (strcmp(funcName, "round") == 0) return round(argValue);
+        if (strcmp(funcName, "trunc") == 0) return trunc(argValue);
+
+        /* sign / roots */
+        if (strcmp(funcName, "sign")  == 0) return (argValue > 0.0) - (argValue < 0.0);
+        if (strcmp(funcName, "cbrt")  == 0) return cbrt(argValue);
+
+        /* logarithms */
+        if (strcmp(funcName, "log2")  == 0) return log2(argValue);
+        if (strcmp(funcName, "log1p") == 0) return log1p(argValue);
+        if (strcmp(funcName, "expm1") == 0) return expm1(argValue);
+
+        /* engineering dB */
+        if (strcmp(funcName, "db")    == 0) return 20.0 * log10(fabs(argValue));
+        if (strcmp(funcName, "dbp")   == 0) return 10.0 * log10(fabs(argValue));
+
         printf("Unknown function: %s\n", funcName);
         return 0;
     }
@@ -379,6 +537,39 @@ Matrix *parse_mat_primary()
             return resultMatrix;
         }
  
+        /* ── vector generators ── */
+        if (strcmp(funcName, "linspace") == 0)
+        {
+            double lsA, lsB;
+            int    lsN;
+            lsA = parse_expression();
+            while (isspace(*expr)) expr++;
+            if (*expr == ',') expr++;
+            lsB = parse_expression();
+            while (isspace(*expr)) expr++;
+            if (*expr == ',') expr++;
+            lsN = (int)parse_expression();
+            while (isspace(*expr)) expr++;
+            if (*expr == ')') expr++;
+            return vf_linspace(lsA, lsB, lsN);
+        }
+
+        if (strcmp(funcName, "zeros") == 0)
+        {
+            int zN = (int)parse_expression();
+            while (isspace(*expr)) expr++;
+            if (*expr == ')') expr++;
+            return vf_zeros(zN);
+        }
+
+        if (strcmp(funcName, "ones") == 0)
+        {
+            int oN = (int)parse_expression();
+            while (isspace(*expr)) expr++;
+            if (*expr == ')') expr++;
+            return vf_ones(oN);
+        }
+
         printf("Unknown matrix function: %s\n", funcName);
         while (*expr && *expr != ')') expr++;
         if (*expr == ')') expr++;
@@ -502,6 +693,9 @@ int is_matrix_context(const char *s)
             if (strcmp(keyword, "transpose") == 0) return 1;
             if (strcmp(keyword, "inv")       == 0) return 1;
             if (strcmp(keyword, "scale")     == 0) return 1;
+            if (strcmp(keyword, "linspace")  == 0) return 1;
+            if (strcmp(keyword, "zeros")     == 0) return 1;
+            if (strcmp(keyword, "ones")      == 0) return 1;
             continue;
         }
         s++;
@@ -674,10 +868,35 @@ void print_help()
         "    -x                   unary negation\n"
         "\n"
         "  Scalar functions\n"
-        "    sin(x)  cos(x)  tan(x)    trig\n"
-        "    sqrt(x) abs(x)            root / absolute value\n"
-        "    log(x)  exp(x)            natural log / exponential\n"
-        "    floor(x) ceil(x)          round toward zero / away\n"        
+        "    sin(x)  cos(x)  tan(x)              trig\n"
+        "    asin(x) acos(x) atan(x)             inverse trig\n"
+        "    atan2(y,x)                          4-quadrant arctangent\n"
+        "    sinh(x) cosh(x) tanh(x)             hyperbolic\n"
+        "    asinh(x) acosh(x) atanh(x)          inverse hyperbolic\n"
+        "    deg(x)  rad(x)                      radians<->degrees\n"
+        "    sqrt(x) cbrt(x) abs(x)              roots / absolute value\n"
+        "    pow(x,y) hypot(x,y)                 power / hypotenuse\n"
+        "    log(x)  log10(x) log2(x)            logarithms\n"
+        "    log1p(x) expm1(x)                   accurate near zero\n"
+        "    exp(x)                              exponential\n"
+        "    floor(x) ceil(x) round(x) trunc(x)  rounding\n"
+        "    mod(x,y)                            remainder (fmod)\n"
+        "    sign(x)                             -1 / 0 / +1\n"
+        "    min(x,y) max(x,y)                   smaller / larger\n"
+        "    clamp(x,lo,hi)                      constrain to range\n"
+        "    db(x)   dbp(x)                      amplitude / power dB\n"
+        "\n"
+        "  Vector -> scalar functions  (argument must be a $matrix var)\n"
+        "    vsum($v)   vmean($v)   vmedian($v)  stats\n"
+        "    vstd($v)   vvar($v)                 std dev / variance\n"
+        "    vmin($v)   vmax($v)   vnorm($v)     min / max / L2 norm\n"
+        "    vlen($v)                            element count\n"
+        "    interp($xv,$yv,x)                   linear interpolation\n"
+        "\n"
+        "  Vector generators  (produce a column-vector matrix variable)\n"
+        "    linspace(a,b,n)   n values from a to b  (use with $v=...)\n"
+        "    zeros(n)          n zeros\n"
+        "    ones(n)           n ones\n"
         "\n"
         "  Scalar variables\n"
         "    $name = expr         assign\n"
