@@ -1,0 +1,78 @@
+#############################################################
+# snapcraft.yaml — snap package definition for Mathrix + parse
+#
+# Author:       Bryan Wilcutt
+# Date Started: 2026-11-06
+# Description:  Builds the parse engine (~/FreeCode/calc) and
+#               the Mathrix GTK4 front end (~/FreeCode/Mathrix)
+#               into ONE snap.  parse is installed at
+#               $SNAP/bin/parse, right where main_gui.c's
+#               resolve_parse_path() looks for it, so nothing
+#               needs to be on the installing computer's PATH.
+#
+# Lives in:     ~/FreeCode/snap/snapcraft.yaml
+# Build with:   cd ~/FreeCode && snapcraft
+#
+# After install the commands are:
+#   mathrix          — the GUI (snap name == app name, so no prefix)
+#   mathrix.parse    — the engine on its own, for the terminal
+#############################################################
+
+name: mathrix
+base: core24                 # Ubuntu 24.04 runtime
+version: '1.0.1'             # keep in step with MATHRIX_VERSION in app_state.h
+summary: Unit-aware engineering computation
+description: |
+  Mathrix is a GTK4 engineering computation application.  The
+  GUI talks to the parse engine over pipes; both ship in this
+  snap, so there is nothing else to install.
+grade: stable
+confinement: strict
+
+#############################################################
+# apps — the commands snapd puts in /snap/bin
+#############################################################
+apps:
+  mathrix:
+    command: bin/mathrix
+    extensions: [gnome]      # supplies GTK4, fonts, themes, display access
+    plugs: [home]            # let it read/write files in the user's home
+
+  parse:
+    command: bin/parse
+    plugs: [home]            # csv/dump commands need to reach user files
+
+#############################################################
+# parts — how each binary is built
+#
+# Neither project has a Makefile, so each part compiles with
+# a plain gcc line.  plugin: nil means "don't guess, just run
+# my override-build" — snapcraft's guesses are rarely as good
+# as a man who has been writing C since 1985.
+#############################################################
+parts:
+  parse:
+    plugin: nil
+    source: calc                         # ~/FreeCode/calc
+    build-packages: [gcc]
+    override-build: |
+      # every .c in calc/ and calc/Algo/ — PipeMgr/ is left
+      # out on purpose: it's the client side, plus a test main()
+      gcc -O2 -I. -IAlgo -o parse *.c Algo/*.c -lm
+      install -D -m 0755 parse "$CRAFT_PART_INSTALL/bin/parse"
+
+  mathrix:
+    plugin: nil
+    source: Mathrix                      # ~/FreeCode/Mathrix
+    build-packages: [gcc, pkg-config]
+    override-build: |
+      # Mathrix borrows two things from the calc tree:
+      #   calc/Algo/graph_data.h   (shared GraphData struct)
+      #   calc/PipeMgr/pipe_mgr.c  (the pipe client)
+      # CRAFT_PROJECT_DIR is ~/FreeCode as seen by the builder.
+      CALC="$CRAFT_PROJECT_DIR/calc"
+      gcc -O2 -I. -I"$CALC/Algo" -I"$CALC/PipeMgr" \
+          $(pkg-config --cflags gtk4) \
+          -o mathrix *.c "$CALC/PipeMgr/pipe_mgr.c" \
+          $(pkg-config --libs gtk4) -lm
+      install -D -m 0755 mathrix "$CRAFT_PART_INSTALL/bin/mathrix"
