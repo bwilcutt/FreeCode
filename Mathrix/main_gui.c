@@ -1,6 +1,7 @@
 #include <gtk/gtk.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "app_state.h"
 #include "module_desc.h"
@@ -26,6 +27,7 @@ static void     on_clear           (GSimpleAction *action, GVariant *param,
                                     gpointer user_data);
 static void     on_quit            (GSimpleAction *action, GVariant *param,
                                     gpointer user_data);
+static const char *resolve_parse_path(char *out, size_t outlen);
 static gboolean connect_to_parse   (void);
 static void     query_parse_version(void);
 
@@ -303,14 +305,14 @@ static const char *CSS =
     "}"
 "dropdown > button > box > label,"
 "dropdown > button label {"
-"  color: #000000;"
+"  color: " MX_BLACK ";"
 "  font-size: 12px;"
 "}"
 "dropdown button label {"
-"  color: #000000;"
+"  color: " MX_BLACK ";"
 "}"
-".mathrix-formpanel dropdown label {"
-"  color: #000000;"
+"dropdown label {"
+"  color: " MX_BLACK ";"
 "}"
     "dropdown > button:hover {"
     "  background-color: " MX_SURFACE0 ";"
@@ -349,6 +351,33 @@ static const char *CSS =
     "popover listview > row label {"
     "  color: inherit;"
     "  font-size: 13px;"
+    "}"
+
+    /* ── dropdown list (the list a dropdown opens) — cream ──
+       The closed dropdown face renders cream with black text, so
+       the list it drops open matches: cream background, black text.
+       These rules start with "dropdown", which makes them more
+       specific than the dark "popover ..." rules above, so they win
+       for dropdown lists only — the File/Help and module menus keep
+       their dark look.  Black text on a dark list was a fine way to
+       hide your options; this is the way to show them. */
+    "dropdown popover > contents,"
+    "dropdown popover listview {"
+    "  background-color: #fdf6e3;"          /* cream */
+    "  border-color: " MX_SURFACE2 ";"
+    "}"
+    "dropdown popover label,"
+    "dropdown popover listview > row,"
+    "dropdown popover listview > row label {"
+    "  color: " MX_BLACK ";"
+    "}"
+    "dropdown popover listview > row:hover {"
+    "  background-color: #eee8d5;"          /* slightly darker cream */
+    "  color: " MX_BLACK ";"
+    "}"
+    "dropdown popover listview > row:selected {"
+    "  background-color: #e3d9bb;"          /* darker again for the pick */
+    "  color: " MX_BLACK ";"
     "}"
 
     /* ── menu popover (File / Help menus) ── */
@@ -653,6 +682,14 @@ static void build_center_panes(GtkWidget *box)
     gtk_paned_set_start_child(GTK_PANED(paned), left_scroll);
     gtk_paned_set_end_child(GTK_PANED(paned),   right_scroll);
     gtk_paned_set_position(GTK_PANED(paned), 300);
+
+    /* never squeeze the form pane below its natural minimum width.
+       GtkPaned's default (shrink = TRUE) lets the divider eat into a
+       wide form — Load CSV with its entry + browse button is one —
+       and GTK keeps the RIGHT edge in view, quietly sliding the left
+       edge of every label off-screen.  With shrink off, the divider
+       simply stops where the form says "no further". */
+    gtk_paned_set_shrink_start_child(GTK_PANED(paned), FALSE);
     gtk_widget_set_vexpand(paned, TRUE);
 
     gtk_box_append(GTK_BOX(box), paned);
@@ -862,6 +899,37 @@ static void on_quit(GSimpleAction *action, GVariant *param,
    ═══════════════════════════════════════════════════════════ */
 
 /*************************************************************
+ * Function:    resolve_parse_path
+ * Input:       out    (char*)  — destination for the full path
+ *              outlen (size_t) — capacity of out
+ * Output:      const char* — out, holding the parse path to run
+ * Description: Works out where the parse binary lives.  When
+ *              Mathrix runs as a snap, snapd sets $SNAP to the
+ *              snap's read-only install folder and parse sits at
+ *              $SNAP/bin/parse beside us.  Otherwise (a normal
+ *              /usr/bin install or a dev build) fall back to
+ *              PARSE_BINARY from app_state.h.  Either way the
+ *              installing computer's PATH is never consulted.
+ *************************************************************/
+static const char *resolve_parse_path(char *out, size_t outlen)
+{
+    const char *snap_dir = getenv("SNAP");
+
+    /* inside a snap: parse ships in the same box, so look there
+       first — /usr/bin is the host's, and the snap can't see it
+       anyway, which is rather the point of a snap */
+    if (snap_dir && snap_dir[0])
+    {
+        snprintf(out, outlen, "%s/bin/parse", snap_dir);
+        return out;
+    }
+
+    /* not a snap: use the compiled-in location */
+    snprintf(out, outlen, "%s", PARSE_BINARY);
+    return out;
+}
+
+/*************************************************************
  * Function:    connect_to_parse
  * Input:       void
  * Output:      gboolean — TRUE on success, FALSE on failure
@@ -873,17 +941,22 @@ static gboolean connect_to_parse(void)
 {
     AppState *st = app_state_get();
     char      startup[256];
+    char      parse_path[512];
 
-    if (!pipe_open(PARSE_BINARY))
+    /* pick the parse binary for this install (snap or /usr/bin) */
+    resolve_parse_path(parse_path, sizeof(parse_path));
+
+    if (!pipe_open(parse_path))
     {
         GtkWidget *dlg  = gtk_window_new();
         GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
         GtkWidget *lbl;
         GtkWidget *btn;
-        char       errmsg[256];
+        char       errmsg[640];
 
+        /* report the path we actually tried, not the default */
         snprintf(errmsg, sizeof(errmsg),
-                 "Could not start parse binary:\n%s", PARSE_BINARY);
+                 "Could not start parse binary:\n%s", parse_path);
 
         gtk_window_set_title(GTK_WINDOW(dlg), "Error");
         gtk_window_set_transient_for(GTK_WINDOW(dlg),
@@ -1039,7 +1112,7 @@ int main(int argc, char *argv[])
     int             status;
 
     app = gtk_application_new("com.mathrix.app",
-                               G_APPLICATION_DEFAULT_FLAGS);
+                               G_APPLICATION_NON_UNIQUE);
     g_signal_connect(app, "activate", G_CALLBACK(on_activate), NULL);
     status = g_application_run(G_APPLICATION(app), argc, argv);
     pipe_close();

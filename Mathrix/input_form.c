@@ -420,6 +420,8 @@ static GtkWidget *build_param_row(GtkWidget *grid, int row,
     GtkWidget  *unit_lbl;
     char        label_text[64];
     int         i;
+    gboolean    attached = FALSE;  /* TRUE once a case has put its
+                                      own container in the grid */
 
     /* ── label ── */
     if (p->required)
@@ -468,7 +470,12 @@ static GtkWidget *build_param_row(GtkWidget *grid, int row,
                 gtk_box_append(GTK_BOX(hbox), browse);
                 gtk_widget_set_hexpand(hbox, TRUE);
                 gtk_grid_attach(GTK_GRID(grid), hbox, 1, row, 1, 1);
-                widget = entry;  /* store entry as the readable widget */
+                widget   = entry;  /* store entry as the readable widget */
+                attached = TRUE;   /* hbox is in the grid; the entry lives
+                                      inside it and must NOT be attached
+                                      a second time below — GTK4 allows
+                                      a widget exactly one parent, and
+                                      says so loudly on stderr */
                 break;
             }
 
@@ -516,7 +523,9 @@ static GtkWidget *build_param_row(GtkWidget *grid, int row,
         }
     }
 
-    if (widget)
+    /* attach the input widget to column 1 — unless its case already
+       put a wrapper (e.g. the file entry + browse button box) there */
+    if (widget && !attached)
         gtk_grid_attach(GTK_GRID(grid), widget, 1, row, 1, 1);
 
     /* ── unit label ── */
