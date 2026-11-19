@@ -50,6 +50,108 @@ const ModuleDesc modules[] =
         1, PLOT_REYNOLDS, "Reynolds Number"
     },
 
+    /* ── Navier-Stokes Cavity ──────────────────────────────── */
+    {
+        "navier",
+        "Navier-Stokes Cavity",
+        "Fluid Mechanics",
+        "Steady 2D flow in a square box whose lid slides sideways, checked "
+        "against the published Ghia (1982) results at Re = 100, 400 and 1000",
+        {
+            { "Re",    "Reynolds number",  "",       PT_SCALAR, NULL, "100",    0,
+              "Leave blank to work it out from lid speed, box size and viscosity" },
+            { "V",     "Lid speed",        "m/s",    PT_SCALAR, NULL, NULL,     0,
+              "Speed of the sliding lid (used only when Re is blank)" },
+            { "D",     "Box size",         "m",      PT_SCALAR, NULL, NULL,     0,
+              "Side length of the square box (used only when Re is blank)" },
+            { "nu",    "Kinematic visc.",  "m²/s",   PT_SCALAR, NULL, NULL,     0,
+              "Kinematic viscosity (use instead of rho+mu)" },
+            { "rho",   "Density",          "kg/m³",  PT_SCALAR, NULL, NULL,     0,
+              "Fluid density (use with mu)" },
+            { "mu",    "Dynamic visc.",    "Pa·s",   PT_SCALAR, NULL, NULL,     0,
+              "Dynamic viscosity (use with rho)" },
+            { "N",     "Grid points",      "",       PT_SCALAR, NULL, "65",     0,
+              "Points along each side; more is slower but more accurate. "
+              "Use 129 or more for Re = 1000" },
+            { "tol",   "Settle tolerance", "",       PT_SCALAR, NULL, "1e-5",   0,
+              "How still the flow must be before it counts as settled" },
+            { "maxit", "Max steps",        "",       PT_SCALAR, NULL, "400000", 0,
+              "Give up after this many time steps if the flow has not settled" },
+        },
+        9,
+        {
+            { "navier_Re",     "Reynolds number",        "",  0, ""  },
+            { "navier_psimin", "Main vortex strength",   "",  0, ""  },
+            { "navier_xc",     "Main vortex centre x",   "",  0, ""  },
+            { "navier_yc",     "Main vortex centre y",   "",  0, ""  },
+            { "navier_err",    "Worst difference from Ghia", "", 0, "" },
+            { "navier_conv",   "Settled (1 = yes)",      "",  0, ""  },
+            { "navier_steps",  "Time steps taken",       "",  0, ""  },
+            { "navier_y",      "Height on centre line",  "",  1, "x" },
+            { "navier_u",      "Horizontal speed",       "",  1, "y" },
+            { "navier_x",      "Position on centre line","",  1, ""  },
+            { "navier_v",      "Vertical speed",         "",  1, ""  },
+        },
+        11,
+        1, PLOT_NAVIER, "Navier-Stokes Cavity"
+    },
+
+    /* ── Channel Flow (Cylinder) ───────────────────────────── */
+    {
+        "channel",
+        "Channel Flow (Cylinder)",
+        "Fluid Mechanics",
+        "Flow through a channel past a cylinder: drag, lift, pressure drop and "
+        "vortex shedding.  Defaults are the DFG benchmark (Schäfer & Turek 1996)",
+        {
+            { "Re",  "Reynolds number",  "",       PT_SCALAR, NULL, "20",    0,
+              "Sets the inlet speed for you.  Leave blank to use Peak inlet "
+              "speed instead.  20 and 100 are the benchmark cases" },
+            { "U",   "Peak inlet speed", "m/s",    PT_SCALAR, NULL, NULL,    0,
+              "Fastest speed at the inlet, mid-channel (used only when "
+              "Reynolds number is blank)" },
+            { "nu",  "Kinematic visc.",  "m²/s",   PT_SCALAR, NULL, "0.001", 0,
+              "Kinematic viscosity of the fluid" },
+            { "rho", "Density",          "kg/m³",  PT_SCALAR, NULL, "1",     0,
+              "Fluid density — scales the forces and pressure" },
+            { "L",   "Channel length",   "m",      PT_SCALAR, NULL, "2.2",   0,
+              "Length of the channel" },
+            { "H",   "Channel height",   "m",      PT_SCALAR, NULL, "0.41",  0,
+              "Height of the channel, wall to wall" },
+            { "cx",  "Cylinder x",       "m",      PT_SCALAR, NULL, "0.2",   0,
+              "Distance of the cylinder centre from the inlet" },
+            { "cy",  "Cylinder y",       "m",      PT_SCALAR, NULL, "0.2",   0,
+              "Height of the cylinder centre above the bottom wall" },
+            { "D",   "Cylinder diameter","m",      PT_SCALAR, NULL, "0.1",   0,
+              "Diameter of the cylinder" },
+            { "res", "Grid cells across","",       PT_SCALAR, NULL, "10",    0,
+              "Grid cells across the cylinder.  10 takes seconds; 20 is "
+              "about twice as accurate but takes minutes" },
+            { "t",   "Longest time",     "s",      PT_SCALAR, NULL, "30",    0,
+              "Stop after this much simulated time if the flow has not "
+              "settled.  Use 8 or more to see vortex shedding" },
+            { "tol", "Settle tolerance", "",       PT_SCALAR, NULL, "1e-4",  0,
+              "How still the flow must be before it counts as settled" },
+        },
+        12,
+        {
+            { "channel_cd",     "Drag coefficient",           "",   0, ""  },
+            { "channel_cl",     "Lift coefficient",           "",   0, ""  },
+            { "channel_cdmax",  "Largest drag coefficient",   "",   0, ""  },
+            { "channel_clmax",  "Largest lift coefficient",   "",   0, ""  },
+            { "channel_dp",     "Pressure drop over cylinder","Pa", 0, ""  },
+            { "channel_st",     "Strouhal number (0 = none)", "",   0, ""  },
+            { "channel_steady", "Settled (1 = yes)",          "",   0, ""  },
+            { "channel_time",   "Simulated time",             "s",  0, ""  },
+            { "channel_steps",  "Time steps taken",           "",   0, ""  },
+            { "channel_tv",     "Time",                       "s",  1, "x" },
+            { "channel_cdv",    "Drag coefficient history",   "",   1, "y" },
+            { "channel_clv",    "Lift coefficient history",   "",   1, ""  },
+        },
+        12,
+        1, PLOT_CHANNEL, "Channel Flow Past a Cylinder"
+    },
+
     /* ── Manning's Equation ────────────────────────────────── */
     {
         "manning",
@@ -401,6 +503,65 @@ const ModuleDesc modules[] =
         },
         9,
         1, PLOT_LINE, "PID Simulation — Process Variable"
+    },
+
+    /* ── Asteroid Impact Screening ─────────────────────────── */
+    {
+        "asteroid",
+        "Asteroid Impact Screening",
+        "Astrodynamics",
+        "Will this asteroid hit Earth? Closest-approach search and impact "
+        "probability from JPL orbital elements and their uncertainties",
+        {
+            { "a",     "Semi-major axis",   "AU",   PT_SCALAR, NULL, NULL,   1,
+              "Size of the orbit (JPL: a)" },
+            { "e",     "Eccentricity",      "",     PT_SCALAR, NULL, NULL,   1,
+              "Shape of the orbit, 0 = circle, must be below 1 (JPL: e)" },
+            { "i",     "Inclination",       "deg",  PT_SCALAR, NULL, NULL,   1,
+              "Tilt of the orbit to the ecliptic (JPL: i)" },
+            { "om",    "Ascending node",    "deg",  PT_SCALAR, NULL, NULL,   1,
+              "Longitude of the ascending node (JPL: node, Omega)" },
+            { "w",     "Arg. of perihelion","deg",  PT_SCALAR, NULL, NULL,   1,
+              "Argument of perihelion (JPL: peri, omega)" },
+            { "M",     "Mean anomaly",      "deg",  PT_SCALAR, NULL, NULL,   1,
+              "Mean anomaly at the epoch (JPL: M)" },
+            { "epoch", "Epoch",             "JD",   PT_SCALAR, NULL, NULL,   1,
+              "Date the elements apply to, as JD or MJD (JPL: Epoch)" },
+            { "start", "Search start",      "JD",   PT_SCALAR, NULL, NULL,   0,
+              "First date to search, JD or MJD (blank = the epoch)" },
+            { "span",  "Search length",     "days", PT_SCALAR, NULL, "365",  0,
+              "How many days to search from the start" },
+            { "step",  "Scan step",         "days", PT_SCALAR, NULL, "0.25", 0,
+              "Sampling interval; every dip in distance is then refined" },
+            { "sa",    "± Semi-major axis", "AU",   PT_SCALAR, NULL, NULL,   0,
+              "1-sigma uncertainty of a (JPL lists it beside each element). "
+              "Leave all ± fields blank for a plain yes/no answer" },
+            { "se",    "± Eccentricity",    "",     PT_SCALAR, NULL, NULL,   0,
+              "1-sigma uncertainty of e" },
+            { "si",    "± Inclination",     "deg",  PT_SCALAR, NULL, NULL,   0,
+              "1-sigma uncertainty of i" },
+            { "som",   "± Ascending node",  "deg",  PT_SCALAR, NULL, NULL,   0,
+              "1-sigma uncertainty of the ascending node" },
+            { "sw",    "± Arg. of perihelion","deg",PT_SCALAR, NULL, NULL,   0,
+              "1-sigma uncertainty of the argument of perihelion" },
+            { "sM",    "± Mean anomaly",    "deg",  PT_SCALAR, NULL, NULL,   0,
+              "1-sigma uncertainty of the mean anomaly" },
+        },
+        16,
+        {
+            { "asteroid_hit",     "Impact (1 = yes)",          "",     0, ""  },
+            { "asteroid_prob",    "Impact probability",        "",     0, ""  },
+            { "asteroid_dmin",    "Closest approach",          "km",   0, ""  },
+            { "asteroid_dmin_er", "Closest approach",          "R⊕",   0, ""  },
+            { "asteroid_dmin_ld", "Closest approach",          "LD",   0, ""  },
+            { "asteroid_tca_d",   "Days to closest approach",  "days", 0, ""  },
+            { "asteroid_vrel",    "Speed relative to Earth",   "km/s", 0, ""  },
+            { "asteroid_bcap",    "Earth capture radius",      "km",   0, ""  },
+            { "asteroid_t",       "Time from start",           "days", 1, "x" },
+            { "asteroid_d",       "Earth distance",            "LD",   1, "y" },
+        },
+        10,
+        1, PLOT_ASTEROID, "Asteroid — Distance from Earth"
     },
 
     /* ── Load CSV ──────────────────────────────────────────── */

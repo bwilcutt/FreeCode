@@ -13,6 +13,9 @@
 #include "specheat_graph.h"
 #include "heatcond_graph.h"
 #include "manning_graph.h"
+#include "asteroid_graph.h"
+#include "navier_graph.h"
+#include "channel_graph.h"
 #include <gtk/gtk.h>
 #include <cairo.h>
 #include <math.h>
@@ -34,6 +37,19 @@
 #define GRAPH_N_XTICKS     8
 #define GRAPH_MIN_W      500
 #define GRAPH_MIN_H      380
+#define GRAPH_PAGE_VALUES 2000     /* values per "dump" page: ~50 KB, safely
+                                      inside the 64 KB reply buffer         */
+
+/* ── printed page: the inputs/results block under the plot ── */
+#define PRINT_FONT        8.5      /* points                                */
+#define PRINT_LINE_H     11.5      /* points per row                        */
+#define PRINT_GAP        14.0      /* space between plot and the block      */
+#define PRINT_HEAD_H     16.0      /* "Inputs" / "Results" heading row      */
+#define PRINT_MAX_FRAC    0.40     /* block never takes more of the page    */
+#define PRINT_RASTER_SCALE 4.0     /* plot raster: 4 px per point ≈ 288 dpi */
+#define PRINT_WHITE_ABOVE  0.78    /* lightness (after the flip) that goes
+                                      to pure paper white: the dark window
+                                      and panel backgrounds land up here    */
 
 /* local aliases from colors.h semantic names */
 #define COL_BG_R        MX_GRAPH_BG_R
@@ -83,10 +99,6 @@
 
 static void      graph_data_free      (GraphData *gd);
 static GraphData *fetch_module_data   (const ModuleDesc *desc);
-static double   *parse_vector_response(const char *response, int *out_n);
-static void      nice_range           (double lo, double hi,
-                                       double *out_lo, double *out_hi,
-                                       double *out_step);
 static void      on_draw              (GtkDrawingArea *da,
                                        cairo_t *cr,
                                        int w, int h,
@@ -103,6 +115,20 @@ static void      draw_axes            (cairo_t *cr,
                                        double x_step, double y_step,
                                        const GraphData *gd);
 static void      on_window_destroy    (GtkWidget *w, gpointer user_data);
+static void      on_print_clicked     (GtkButton *btn, gpointer user_data);
+static void      on_print_draw_page   (GtkPrintOperation *op,
+                                       GtkPrintContext   *ctx,
+                                       int                page_nr,
+                                       gpointer           user_data);
+static void      paint_plot_for_paper (cairo_t *cr, GraphData *gd,
+                                       double w, double h);
+static void      paperize_pixel       (guint32 *px);
+static void      draw_report_column   (cairo_t *cr, double x, double y,
+                                       double col_w, const char *heading,
+                                       GPtrArray *labels, GPtrArray *values);
+
+/* report waiting for the next graph window (see graph_set_next_report) */
+static GraphReport *g_next_report = NULL;
 
 /* ═══════════════════════════════════════════════════════════
    PUBLIC — graph_window_open
@@ -180,6 +206,7 @@ void graph_window_open_vars(const char   *title,
     GtkWidget     *vbox;
     GtkWidget     *toolbar;
     GtkWidget     *close_btn;
+    GtkWidget     *print_btn;
     GtkWidget     *title_lbl;
     GraphData     *gd;
     int            i;
@@ -207,12 +234,20 @@ void graph_window_open_vars(const char   *title,
     window = gtk_window_new();
     gtk_window_set_title(GTK_WINDOW(window), gd->title);
     gtk_window_set_default_size(GTK_WINDOW(window),
-                                plot_type == PLOT_MOHR
+                                plot_type == PLOT_CHANNEL
+                                ? GRAPH_MIN_W + 500
+                                : plot_type == PLOT_NAVIER
+                                ? GRAPH_MIN_W + 400
+                                : plot_type == PLOT_MOHR
                                 ? GRAPH_MIN_W + 280
                                 : plot_type == PLOT_BERNOULLI
                                 ? GRAPH_MIN_W + 200
                                 : GRAPH_MIN_W + 100,
-                                plot_type == PLOT_BERNOULLI
+                                plot_type == PLOT_CHANNEL
+                                ? GRAPH_MIN_H + 300
+                                : plot_type == PLOT_NAVIER
+                                ? GRAPH_MIN_H + 140
+                                : plot_type == PLOT_BERNOULLI
                                 ? GRAPH_MIN_H + 110
                                 : GRAPH_MIN_H + 60);
     gtk_window_set_transient_for(GTK_WINDOW(window),
@@ -238,6 +273,14 @@ void graph_window_open_vars(const char   *title,
     gtk_widget_add_css_class(title_lbl, "graph-title-lbl");
     gtk_box_append(GTK_BOX(toolbar), title_lbl);
 
+    /* Print sits just before Close.  It prints the plot only — no
+       toolbar — with the inputs and results listed underneath */
+    print_btn = gtk_button_new_with_label("🖨 Print");
+    gtk_widget_add_css_class(print_btn, "mathrix-run-btn");
+    g_signal_connect(print_btn, "clicked",
+                     G_CALLBACK(on_print_clicked), window);
+    gtk_box_append(GTK_BOX(toolbar), print_btn);
+
     close_btn = gtk_button_new_with_label("✕ Close");
     gtk_widget_add_css_class(close_btn, "mathrix-run-btn");
     g_signal_connect_swapped(close_btn, "clicked",
@@ -257,6 +300,15 @@ void graph_window_open_vars(const char   *title,
     gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(da),
                                     on_draw, gd, NULL);
     gtk_box_append(GTK_BOX(vbox), da);
+
+    /* the print callback finds the data and the report on the window */
+    g_object_set_data(G_OBJECT(window), "mx-graph-data", gd);
+    if (g_next_report)
+    {
+        g_object_set_data_full(G_OBJECT(window), "mx-graph-report",
+                               g_next_report, graph_report_free);
+        g_next_report = NULL;            /* the window owns it now */
+    }
 
     /* free gd when window is destroyed */
     g_signal_connect(window, "destroy",
@@ -398,7 +450,7 @@ static GraphData *fetch_module_data(const ModuleDesc *desc)
  *              Allocates exactly N doubles and fills them.
  *              Returns NULL if the block is missing or malformed.
  *************************************************************/
-static double *parse_vector_response(const char *response, int *out_n)
+double *parse_vector_response(const char *response, int *out_n)
 {
     const char *p     = response;
     int         n     = 0;
@@ -464,9 +516,9 @@ static double *parse_vector_response(const char *response, int *out_n)
  *              standard algorithm: find the data range, pick a
  *              round step size, then floor/ceil to that step.
  *************************************************************/
-static void nice_range(double lo, double hi,
-                       double *out_lo, double *out_hi,
-                       double *out_step)
+void nice_range(double lo, double hi,
+                double *out_lo, double *out_hi,
+                double *out_step)
 {
     double range = hi - lo;
     double mag;
@@ -484,6 +536,27 @@ static void nice_range(double lo, double hi,
     *out_step = step;
     *out_lo   = floor(lo / step) * step;
     *out_hi   = ceil (hi / step) * step;
+}
+
+/*************************************************************
+ * Function:    show_text_at
+ * Input:       cr    — Cairo context
+ *              x, y  — anchor point
+ *              text  — string to draw
+ *              align — 0 = left, 0.5 = centred, 1 = right
+ * Output:      void
+ * Description: Draws text horizontally aligned on (x, y) baseline.
+ *              Shared by the module graphs (asteroid_graph.c,
+ *              navier_graph.c) so each one does not carry its own.
+ *************************************************************/
+void show_text_at(cairo_t *cr, double x, double y,
+                  const char *text, double align)
+{
+    cairo_text_extents_t te;
+
+    cairo_text_extents(cr, text, &te);
+    cairo_move_to(cr, x - te.x_advance * align, y);
+    cairo_show_text(cr, text);
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -535,7 +608,13 @@ static void on_draw(GtkDrawingArea *da, cairo_t *cr,
     else if (gd->plot_type == PLOT_SPECHEAT)
         draw_specheat_plot(cr, w, h, gd);  
     else if (gd->plot_type == PLOT_MANNING)
-        draw_manning_plot(cr, w, h, gd);                         
+        draw_manning_plot(cr, w, h, gd);
+    else if (gd->plot_type == PLOT_ASTEROID)
+        draw_asteroid_plot(cr, w, h, gd);
+    else if (gd->plot_type == PLOT_NAVIER)
+        draw_navier_plot(cr, w, h, gd);
+    else if (gd->plot_type == PLOT_CHANNEL)
+        draw_channel_plot(cr, w, h, gd);                         
     else
         draw_line_plot(cr, w, h, gd);
 }
@@ -921,4 +1000,553 @@ static void on_window_destroy(GtkWidget *w, gpointer user_data)
 {
     (void)w;
     graph_data_free((GraphData *)user_data);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   REPORT — inputs and results printed under a plot
+   ═══════════════════════════════════════════════════════════ */
+
+GraphReport *graph_report_new(void)
+{
+    GraphReport *r = g_new0(GraphReport, 1);
+
+    r->in_label  = g_ptr_array_new_with_free_func(g_free);
+    r->in_value  = g_ptr_array_new_with_free_func(g_free);
+    r->out_label = g_ptr_array_new_with_free_func(g_free);
+    r->out_value = g_ptr_array_new_with_free_func(g_free);
+    return r;
+}
+
+void graph_report_free(gpointer data)
+{
+    GraphReport *r = (GraphReport *)data;
+
+    if (!r) return;
+    g_ptr_array_unref(r->in_label);
+    g_ptr_array_unref(r->in_value);
+    g_ptr_array_unref(r->out_label);
+    g_ptr_array_unref(r->out_value);
+    g_free(r);
+}
+
+void graph_report_add(GraphReport *r, int result,
+                      const char *label, const char *value,
+                      const char *units)
+{
+    if (!r || !label || !value) return;
+
+    g_ptr_array_add(result ? r->out_label : r->in_label, g_strdup(label));
+    g_ptr_array_add(result ? r->out_value : r->in_value,
+                    (units && units[0])
+                        ? g_strdup_printf("%s %s", value, units)
+                        : g_strdup(value));
+}
+
+void graph_set_next_report(GraphReport *r)
+{
+    /* a plot that never opened (no data) leaves its report behind */
+    graph_report_free(g_next_report);
+    g_next_report = r;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PRINTING
+   ═══════════════════════════════════════════════════════════ */
+
+/*************************************************************
+ * Function:    on_print_clicked
+ * Input:       btn       (GtkButton*) — the Print button
+ *              user_data (gpointer)   — the graph window
+ * Output:      void
+ * Description: Opens the system print dialog for one landscape
+ *              page.  "Print to File" in that dialog gives a PDF.
+ *************************************************************/
+static void on_print_clicked(GtkButton *btn, gpointer user_data)
+{
+    GtkWindow              *window = GTK_WINDOW(user_data);
+    GraphData              *gd;
+    GtkPrintOperation      *op;
+    GtkPageSetup           *setup;
+    GtkPrintOperationResult result;
+    GError                 *err = NULL;
+
+    (void)btn;
+
+    gd = g_object_get_data(G_OBJECT(window), "mx-graph-data");
+    if (!gd) return;
+
+    op = gtk_print_operation_new();
+    gtk_print_operation_set_n_pages(op, 1);
+    gtk_print_operation_set_job_name(op, gd->title);
+
+    /* work in points so the plot's font sizes come out about the
+       same on paper as on screen */
+    gtk_print_operation_set_unit(op, GTK_UNIT_POINTS);
+
+    /* plots are wider than tall — default to landscape */
+    setup = gtk_page_setup_new();
+    gtk_page_setup_set_orientation(setup, GTK_PAGE_ORIENTATION_LANDSCAPE);
+    gtk_print_operation_set_default_page_setup(op, setup);
+    g_object_unref(setup);
+
+    g_signal_connect(op, "draw-page",
+                     G_CALLBACK(on_print_draw_page), window);
+
+    result = gtk_print_operation_run(op,
+                                     GTK_PRINT_OPERATION_ACTION_PRINT_DIALOG,
+                                     window, &err);
+
+    if (result == GTK_PRINT_OPERATION_RESULT_ERROR)
+    {
+        app_status_set("Printing failed: %s",
+                       err ? err->message : "the printer gave no reason");
+        g_clear_error(&err);
+    }
+    else if (result == GTK_PRINT_OPERATION_RESULT_APPLY)
+        app_status_set("Sent to printer: %s", gd->title);
+
+    g_object_unref(op);
+}
+
+/*************************************************************
+ * Function:    on_print_draw_page
+ * Input:       op        — the print operation (unused)
+ *              ctx       — print context: Cairo context and page size
+ *              page_nr   — always 0, there is one page
+ *              user_data — the graph window
+ * Output:      void
+ * Description: Lays out the page: the plot fills the top, drawn
+ *              by the very same on_draw() the window uses (but
+ *              turned light-on-dark → dark-on-white), and
+ *              the inputs and results go underneath it in two
+ *              columns, outside the plot.
+ *************************************************************/
+static void on_print_draw_page(GtkPrintOperation *op,
+                               GtkPrintContext   *ctx,
+                               int                page_nr,
+                               gpointer           user_data)
+{
+    GObject     *window = G_OBJECT(user_data);
+    GraphData   *gd     = g_object_get_data(window, "mx-graph-data");
+    GraphReport *r      = g_object_get_data(window, "mx-graph-report");
+    cairo_t     *cr     = gtk_print_context_get_cairo_context(ctx);
+    double       page_w = gtk_print_context_get_width(ctx);
+    double       page_h = gtk_print_context_get_height(ctx);
+    double       block_h = 0.0;
+    double       plot_h;
+    guint        rows;
+
+    (void)op;
+    (void)page_nr;
+
+    if (!gd) return;
+
+    /* ── how tall the block under the plot needs to be ── */
+    if (r)
+    {
+        rows    = MAX(r->in_label->len, r->out_label->len);
+        block_h = PRINT_GAP + PRINT_HEAD_H + rows * PRINT_LINE_H;
+        block_h = MIN(block_h, page_h * PRINT_MAX_FRAC);
+    }
+    plot_h = page_h - block_h;
+
+    /* ── the plot, on white paper instead of the screen's dark theme ── */
+    paint_plot_for_paper(cr, gd, page_w, plot_h);
+
+    if (!r) return;
+
+    /* ── inputs on the left half, results on the right ── */
+    draw_report_column(cr, 0.0, plot_h + PRINT_GAP, page_w / 2.0 - 12.0,
+                       "Inputs", r->in_label, r->in_value);
+    draw_report_column(cr, page_w / 2.0 + 12.0, plot_h + PRINT_GAP,
+                       page_w / 2.0 - 12.0,
+                       "Results", r->out_label, r->out_value);
+}
+
+/*************************************************************
+ * Function:    paint_plot_for_paper
+ * Input:       cr   — the printer's Cairo context
+ *              gd   — the plot's data
+ *              w, h — area to fill, in points, at the page's top-left
+ * Output:      void
+ * Description: Every plot draws itself in the screen's dark theme,
+ *              and each of the module graphs hard-codes those
+ *              colours.  Rather than teach a dozen draw functions a
+ *              second palette, the plot is drawn once at ~288 dpi
+ *              into an image, every pixel's lightness is flipped
+ *              while its hue is kept (paperize_pixel), and the image
+ *              goes on the page.  Dark background → white paper,
+ *              light text → dark text, blue curve → darker blue.
+ *              Toner budget: saved.  Every plot module: untouched.
+ *************************************************************/
+static void paint_plot_for_paper(cairo_t *cr, GraphData *gd,
+                                 double w, double h)
+{
+    int              img_w = (int)ceil(w * PRINT_RASTER_SCALE);
+    int              img_h = (int)ceil(h * PRINT_RASTER_SCALE);
+    cairo_surface_t *img;
+    cairo_t         *icr;
+    guint32         *row;
+    unsigned char   *data;
+    int              stride;
+    int              x;
+    int              y;
+
+    if (img_w <= 0 || img_h <= 0) return;
+
+    /* ── draw the plot exactly as on screen, just with more pixels ── */
+    img = cairo_image_surface_create(CAIRO_FORMAT_RGB24, img_w, img_h);
+    icr = cairo_create(img);
+    cairo_scale(icr, PRINT_RASTER_SCALE, PRINT_RASTER_SCALE);
+    on_draw(NULL, icr, (int)w, (int)h, gd);
+    cairo_destroy(icr);
+
+    /* ── flip it to dark-on-white, one pixel at a time ── */
+    cairo_surface_flush(img);
+    data   = cairo_image_surface_get_data(img);
+    stride = cairo_image_surface_get_stride(img);
+    for (y = 0; y < img_h; y++)
+    {
+        row = (guint32 *)(data + (size_t)y * stride);
+        for (x = 0; x < img_w; x++)
+            paperize_pixel(&row[x]);
+    }
+    cairo_surface_mark_dirty(img);
+
+    /* ── place it on the page, scaled back down to points ── */
+    cairo_save(cr);
+    cairo_rectangle(cr, 0, 0, w, h);
+    cairo_clip(cr);
+    cairo_scale(cr, 1.0 / PRINT_RASTER_SCALE, 1.0 / PRINT_RASTER_SCALE);
+    cairo_set_source_surface(cr, img, 0, 0);
+    cairo_paint(cr);
+    cairo_restore(cr);
+
+    cairo_surface_destroy(img);
+}
+
+/*************************************************************
+ * Function:    paperize_pixel
+ * Input:       px (guint32*) — one CAIRO_FORMAT_RGB24 pixel, changed in place
+ * Output:      void
+ * Description: HSL lightness flip: L becomes 1 - L, hue and
+ *              saturation stay put, so colours keep their meaning
+ *              (green banner stays green) but light becomes dark.
+ *              Anything that comes out lighter than
+ *              PRINT_WHITE_ABOVE — the dark backgrounds — is
+ *              snapped to pure white so the printer skips it.
+ *************************************************************/
+static void paperize_pixel(guint32 *px)
+{
+    double r = ((*px >> 16) & 0xFF) / 255.0;
+    double g = ((*px >>  8) & 0xFF) / 255.0;
+    double b = ( *px        & 0xFF) / 255.0;
+    double mx = fmax(r, fmax(g, b));
+    double mn = fmin(r, fmin(g, b));
+    double l  = (mx + mn) / 2.0;
+    double nl;
+    double k;
+
+    /* new lightness; background-dark pixels go straight to paper */
+    nl = 1.0 - l;
+    if (nl >= PRINT_WHITE_ABOVE)
+    {
+        *px = 0x00FFFFFF;
+        return;
+    }
+
+    /* same hue and saturation at the new lightness: every channel's
+       distance from mid-grey scales by the same factor HSL uses —
+       chroma is proportional to min(L, 1-L) */
+    k = (fmin(l, 1.0 - l) > 1e-9) ? fmin(nl, 1.0 - nl) / fmin(l, 1.0 - l)
+                                  : 0.0;
+    r = nl + (r - l) * k;
+    g = nl + (g - l) * k;
+    b = nl + (b - l) * k;
+
+    *px = ((guint32)(fmin(fmax(r, 0.0), 1.0) * 255.0 + 0.5) << 16) |
+          ((guint32)(fmin(fmax(g, 0.0), 1.0) * 255.0 + 0.5) <<  8) |
+           (guint32)(fmin(fmax(b, 0.0), 1.0) * 255.0 + 0.5);
+}
+
+/*************************************************************
+ * Function:    draw_report_column
+ * Input:       cr      — Cairo context
+ *              x, y    — top-left of the column, in points
+ *              col_w   — column width
+ *              heading — "Inputs" or "Results"
+ *              labels  — row labels
+ *              values  — row values, parallel to labels
+ * Output:      void
+ * Description: A heading with a rule under it, then one row per
+ *              entry: label on the left, value right-aligned.
+ *              Black on paper — the plot keeps its screen colours,
+ *              the table under it does not need to burn toner.
+ *************************************************************/
+static void draw_report_column(cairo_t *cr, double x, double y,
+                               double col_w, const char *heading,
+                               GPtrArray *labels, GPtrArray *values)
+{
+    guint  i;
+    double row_y;
+
+    if (labels->len == 0) return;
+
+    /* ── heading and rule ── */
+    cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+    cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL,
+                           CAIRO_FONT_WEIGHT_BOLD);
+    cairo_set_font_size(cr, PRINT_FONT + 1.0);
+    show_text_at(cr, x, y + PRINT_HEAD_H - 5.0, heading, 0.0);
+
+    cairo_set_line_width(cr, 0.6);
+    cairo_move_to(cr, x,         y + PRINT_HEAD_H - 1.0);
+    cairo_line_to(cr, x + col_w, y + PRINT_HEAD_H - 1.0);
+    cairo_stroke(cr);
+
+    /* ── rows ── */
+    cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL,
+                           CAIRO_FONT_WEIGHT_NORMAL);
+    cairo_set_font_size(cr, PRINT_FONT);
+    for (i = 0; i < labels->len; i++)
+    {
+        row_y = y + PRINT_HEAD_H + (i + 1) * PRINT_LINE_H - 2.0;
+        show_text_at(cr, x,         row_y, g_ptr_array_index(labels, i), 0.0);
+        show_text_at(cr, x + col_w, row_y, g_ptr_array_index(values, i), 1.0);
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SHARED PANEL HELPERS — used by the module graphs
+   (navier_graph.c, channel_graph.c); see graph.h
+   ═══════════════════════════════════════════════════════════ */
+
+void graph_data_range(const double *a, int na, const double *b, int nb,
+                      double pad_frac, double *lo, double *hi)
+{
+    int i;
+
+    double pad;
+
+    *lo =  1e300;
+    *hi = -1e300;
+    for (i = 0; i < na; i++) { *lo = fmin(*lo, a[i]); *hi = fmax(*hi, a[i]); }
+    for (i = 0; i < nb; i++) { *lo = fmin(*lo, b[i]); *hi = fmax(*hi, b[i]); }
+
+    /* breathing room each side, so a peak that lands exactly on a
+       round number (v = -0.2500, say) is not shaved off by the frame */
+    pad  = (*hi - *lo) * pad_frac;
+    *lo -= pad;
+    *hi += pad;
+}
+
+/*************************************************************
+ * Function:    graph_tick_label
+ * Input:       v    (double) — tick value
+ *              step (double) — tick spacing
+ *              buf  (char*)  — receives the label
+ *              len  (size_t) — capacity of buf
+ * Output:      void
+ * Description: Snaps v to the tick grid before printing, so the
+ *              zero tick reads "0" and not "-1.38778e-17".
+ *              Floating point: always one ulp from embarrassment.
+ *************************************************************/
+static void graph_tick_label(double v, double step, char *buf, size_t len)
+{
+    v = round(v / step) * step;
+    if (fabs(v) < step * 1e-6) v = 0.0;
+    snprintf(buf, len, "%g", v);
+}
+
+void graph_xy_panel(cairo_t *cr,
+                    double px, double py, double pw, double ph,
+                    const char *title,
+                    const char *x_label, const char *y_label,
+                    const double *cx, const double *cy, int n,
+                    const double *dx, const double *dy, int nd,
+                    double ref_y,
+                    GraphAxis ax, GraphAxis ay)
+{
+    const double dash[] = { 5.0, 4.0 };
+    double       v;
+    char         s[32];
+    int          i;
+
+    /* map data to pixels — y grows upward on paper, downward on screen */
+#define PX(x) (px + ((x) - ax.lo) / (ax.hi - ax.lo) * pw)
+#define PY(y) (py + ph - ((y) - ay.lo) / (ay.hi - ay.lo) * ph)
+
+    /* ── panel background ── */
+    cairo_set_source_rgb(cr, MX_GRAPH_PANEL_R, MX_GRAPH_PANEL_G, MX_GRAPH_PANEL_B);
+    cairo_rectangle(cr, px, py, pw, ph);
+    cairo_fill(cr);
+
+    /* ── heading ── */
+    cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL,
+                           CAIRO_FONT_WEIGHT_BOLD);
+    cairo_set_font_size(cr, 11.5);
+    cairo_set_source_rgb(cr, MX_GRAPH_TEXT_R, MX_GRAPH_TEXT_G, MX_GRAPH_TEXT_B);
+    show_text_at(cr, px + pw / 2.0, py - 8.0, title, 0.5);
+
+    cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL,
+                           CAIRO_FONT_WEIGHT_NORMAL);
+    cairo_set_font_size(cr, 10.0);
+    cairo_set_line_width(cr, 1.0);
+
+    /* ── vertical grid lines + x tick labels ── */
+    for (v = ax.lo; v <= ax.hi + ax.step * 1e-6; v += ax.step)
+    {
+        cairo_set_source_rgba(cr, MX_GRAPH_GRID_R, MX_GRAPH_GRID_G,
+                              MX_GRAPH_GRID_B, 0.7);
+        cairo_move_to(cr, PX(v), py);
+        cairo_line_to(cr, PX(v), py + ph);
+        cairo_stroke(cr);
+
+        graph_tick_label(v, ax.step, s, sizeof(s));
+        cairo_set_source_rgb(cr, MX_GRAPH_TEXT_R, MX_GRAPH_TEXT_G, MX_GRAPH_TEXT_B);
+        show_text_at(cr, PX(v), py + ph + 15.0, s, 0.5);
+    }
+
+    /* ── horizontal grid lines + y tick labels ── */
+    for (v = ay.lo; v <= ay.hi + ay.step * 1e-6; v += ay.step)
+    {
+        cairo_set_source_rgba(cr, MX_GRAPH_GRID_R, MX_GRAPH_GRID_G,
+                              MX_GRAPH_GRID_B, 0.7);
+        cairo_move_to(cr, px,      PY(v));
+        cairo_line_to(cr, px + pw, PY(v));
+        cairo_stroke(cr);
+
+        graph_tick_label(v, ay.step, s, sizeof(s));
+        cairo_set_source_rgb(cr, MX_GRAPH_TEXT_R, MX_GRAPH_TEXT_G, MX_GRAPH_TEXT_B);
+        show_text_at(cr, px - 6.0, PY(v) + 4.0, s, 1.0);
+    }
+
+    /* ── axis labels ── */
+    show_text_at(cr, px + pw / 2.0, py + ph + 34.0, x_label, 0.5);
+
+    cairo_save(cr);
+    cairo_translate(cr, px - 44.0, py + ph / 2.0);
+    cairo_rotate(cr, -M_PI / 2.0);
+    show_text_at(cr, 0, 0, y_label, 0.5);
+    cairo_restore(cr);
+
+    /* everything from here on stays inside the panel */
+    cairo_save(cr);
+    cairo_rectangle(cr, px, py, pw, ph);
+    cairo_clip(cr);
+
+    /* ── dashed zero lines: where the flow reverses direction ── */
+    cairo_save(cr);
+    cairo_set_source_rgb(cr, MX_GRAPH_ZERO_R, MX_GRAPH_ZERO_G, MX_GRAPH_ZERO_B);
+    cairo_set_line_width(cr, 1.2);
+    cairo_set_dash(cr, dash, 2, 0);
+    if (ax.lo < 0.0 && ax.hi > 0.0)
+    {
+        cairo_move_to(cr, PX(0.0), py);
+        cairo_line_to(cr, PX(0.0), py + ph);
+        cairo_stroke(cr);
+    }
+    if (ay.lo < 0.0 && ay.hi > 0.0)
+    {
+        cairo_move_to(cr, px,      PY(0.0));
+        cairo_line_to(cr, px + pw, PY(0.0));
+        cairo_stroke(cr);
+    }
+    cairo_restore(cr);
+
+    /* ── reference value: a dashed line in the benchmark-dot colour ── */
+    if (!isnan(ref_y))
+    {
+        const double ref_dash[] = { 8.0, 5.0 };
+
+        cairo_save(cr);
+        cairo_set_source_rgb(cr, MX_GRAPH_DOT_R, MX_GRAPH_DOT_G, MX_GRAPH_DOT_B);
+        cairo_set_line_width(cr, 1.6);
+        cairo_set_dash(cr, ref_dash, 2, 0);
+        cairo_move_to(cr, px,      PY(ref_y));
+        cairo_line_to(cr, px + pw, PY(ref_y));
+        cairo_stroke(cr);
+        cairo_restore(cr);
+    }
+
+    /* ── this solution: a line ── */
+    cairo_move_to(cr, PX(cx[0]), PY(cy[0]));
+    for (i = 1; i < n; i++)
+        cairo_line_to(cr, PX(cx[i]), PY(cy[i]));
+    cairo_set_source_rgb(cr, MX_GRAPH_LINE_R, MX_GRAPH_LINE_G, MX_GRAPH_LINE_B);
+    cairo_set_line_width(cr, 2.0);
+    cairo_stroke(cr);
+
+    /* ── benchmark points: dots with a dark rim so they read over the line ── */
+    for (i = 0; i < nd; i++)
+    {
+        cairo_new_path(cr);
+        cairo_arc(cr, PX(dx[i]), PY(dy[i]), GRAPH_DOT_RADIUS, 0, 2 * M_PI);
+        cairo_set_source_rgb(cr, MX_GRAPH_DOT_R, MX_GRAPH_DOT_G, MX_GRAPH_DOT_B);
+        cairo_fill_preserve(cr);
+        cairo_set_source_rgb(cr, MX_CRUST_R, MX_CRUST_G, MX_CRUST_B);
+        cairo_set_line_width(cr, 1.0);
+        cairo_stroke(cr);
+    }
+
+    cairo_restore(cr);   /* end clip */
+
+    /* ── frame ── */
+    cairo_set_source_rgb(cr, MX_GRAPH_AXIS_R, MX_GRAPH_AXIS_G, MX_GRAPH_AXIS_B);
+    cairo_set_line_width(cr, 1.0);
+    cairo_rectangle(cr, px, py, pw, ph);
+    cairo_stroke(cr);
+
+#undef PX
+#undef PY
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SHARED FETCH HELPERS — results from parse, any size
+   ═══════════════════════════════════════════════════════════ */
+
+double graph_fetch_scalar(const char *var)
+{
+    char cmd[64];
+    char buf[256];
+
+    snprintf(cmd, sizeof(cmd), "$%s\n", var);
+    if (!pipe_transact(cmd, buf, sizeof(buf))) return 0.0;
+    return atof(buf);
+}
+
+double *graph_fetch_vector(const char *var, int *out_n)
+{
+    AppState *st   = app_state_get();
+    double   *all  = NULL;
+    double   *page;
+    int       have = 0;
+    int       got;
+    char      cmd[96];
+
+    *out_n = 0;
+
+    /* ask for one page at a time until parse sends a short one —
+       the last page, or the only one for a small vector */
+    for (;;)
+    {
+        snprintf(cmd, sizeof(cmd), "dump $%s start=%d count=%d\n",
+                 var, have, GRAPH_PAGE_VALUES);
+        if (!pipe_transact(cmd, st->response_buf, RESPONSE_BUFSIZE)) break;
+
+        /* parse this page before the next request overwrites the buffer */
+        page = parse_vector_response(st->response_buf, &got);
+        if (!page || got <= 0) { g_free(page); break; }
+
+        all = g_renew(double, all, have + got);
+        memcpy(all + have, page, got * sizeof(double));
+        have += got;
+        g_free(page);
+
+        if (got < GRAPH_PAGE_VALUES) break;
+    }
+
+    if (have == 0) { g_free(all); return NULL; }
+    *out_n = have;
+    return all;
 }

@@ -13,6 +13,9 @@
 #include "idealgas_graph.h"
 #include "heatcond_graph.h"
 #include "manning_graph.h"
+#include "asteroid_graph.h"
+#include "navier_graph.h"
+#include "channel_graph.h"
 #include "pipe_mgr.h"
 
 #include <gtk/gtk.h>
@@ -31,9 +34,36 @@ typedef struct
     const ModuleDesc *desc;                      /* current module         */
     GtkWidget        *widgets[FORM_MAX_PARAMS];  /* one widget per param   */
     GtkWidget        *plot_btn;                  /* NULL if no plot        */
+    GtkWidget        *run_btn;                   /* greyed out while busy  */
+    GtkWidget        *spinner;                   /* spins while parse works */
+    GtkWidget        *busy_row;                  /* spinner + "please wait" */
 } FormState;
 
 static FormState g_form;
+
+/*************************************************************
+ * Struct:      FormJob
+ * Description: One command handed to parse on a worker thread,
+ *              so the window keeps drawing (and the spinner keeps
+ *              spinning) while a long calculation runs.
+ *
+ *   desc      — module the command belongs to
+ *   cmd       — the command line sent to parse
+ *   response  — parse's reply, g_malloc'd by the worker
+ *   ok        — 1 if parse answered at all
+ *   is_plot   — 1 = open the plot window when the answer arrives
+ *************************************************************/
+typedef struct
+{
+    const ModuleDesc *desc;
+    char              cmd[1024];
+    char             *response;
+    int               ok;
+    int               is_plot;
+} FormJob;
+
+/* one parse conversation at a time — the pipe is not a party line */
+static gboolean g_busy = FALSE;
 
 /* ═══════════════════════════════════════════════════════════
    FORWARD DECLARATIONS
@@ -47,6 +77,18 @@ static void on_run_clicked         (GtkButton *btn, gpointer user_data);
 static void on_plot_clicked        (GtkButton *btn, gpointer user_data);
 static void on_entry_activate      (GtkEntry  *entry, gpointer user_data);
 static void on_browse_clicked      (GtkButton *btn, gpointer user_data);
+static GraphReport *build_report   (const ModuleDesc *desc);
+static int  build_form_command     (const ModuleDesc *desc,
+                                    char *cmd, size_t cmdlen);
+static void start_job              (const ModuleDesc *desc,
+                                    const char *cmd, int is_plot);
+static void job_thread             (GTask *task, gpointer source,
+                                    gpointer task_data,
+                                    GCancellable *cancel);
+static void on_job_done            (GObject *source, GAsyncResult *res,
+                                    gpointer user_data);
+static void set_busy               (gboolean busy, const char *label);
+static void open_plot              (const ModuleDesc *desc);
 
 /* ═══════════════════════════════════════════════════════════
    PUBLIC — input_form_load
@@ -74,14 +116,23 @@ void input_form_load(const ModuleDesc *desc, GtkWidget *form_box)
     GtkWidget  *btn_box;
     GtkWidget  *run_btn;
     GtkWidget  *plot_btn;
+    GtkWidget  *busy_lbl;
     GtkWidget  *out_title;
     GtkWidget  *out_lbl;
     int         i;
-    char        out_text[512];
+    char        out_text[1024];
     int         pos;
     int         n;
 
     if (!desc || !form_box) return;
+
+    /* the running job belongs to this form — swapping it out from
+       under the answer would hand the results to the wrong module */
+    if (g_busy)
+    {
+        app_status_set("Still calculating — wait for it to finish, then switch");
+        return;
+    }
 
     /* ── clear existing children ── */
     while ((child = gtk_widget_get_first_child(form_box)) != NULL)
@@ -134,6 +185,7 @@ void input_form_load(const ModuleDesc *desc, GtkWidget *form_box)
     gtk_widget_set_hexpand(run_btn, TRUE);
     g_signal_connect(run_btn, "clicked", G_CALLBACK(on_run_clicked), NULL);
     gtk_box_append(GTK_BOX(btn_box), run_btn);
+    g_form.run_btn = run_btn;
 
     if (desc->has_plot)
     {
@@ -147,6 +199,26 @@ void input_form_load(const ModuleDesc *desc, GtkWidget *form_box)
     }
 
     gtk_box_append(GTK_BOX(form_box), btn_box);
+
+    /* ── busy row under the buttons: spinner + "please wait", hidden
+          until parse is working.  The form-title class lends both the
+          bright blue text colour, which the spinner draws itself in —
+          the default grey vanishes on this background ── */
+    g_form.busy_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_widget_set_halign(g_form.busy_row, GTK_ALIGN_CENTER);
+    gtk_widget_set_margin_bottom(g_form.busy_row, 10);
+
+    g_form.spinner = gtk_spinner_new();
+    gtk_widget_set_size_request(g_form.spinner, 28, 28);
+    gtk_widget_add_css_class(g_form.spinner, "mathrix-form-title");
+    gtk_box_append(GTK_BOX(g_form.busy_row), g_form.spinner);
+
+    busy_lbl = gtk_label_new("Calculating — please wait …");
+    gtk_widget_add_css_class(busy_lbl, "mathrix-form-title");
+    gtk_box_append(GTK_BOX(g_form.busy_row), busy_lbl);
+
+    gtk_widget_set_visible(g_form.busy_row, FALSE);
+    gtk_box_append(GTK_BOX(form_box), g_form.busy_row);
 
     /* ── output variable summary ── */
     if (desc->n_outputs > 0)
@@ -197,22 +269,112 @@ void input_form_load(const ModuleDesc *desc, GtkWidget *form_box)
  * Function:    input_form_run
  * Input:       void
  * Output:      void
- * Description: Reads all field values, builds the parse command,
- *              sends it, and appends the response to the output
- *              panel.  Validates that all required fields are
- *              filled before sending.
+ * Description: Reads all field values, builds the parse command
+ *              and hands it to parse on a worker thread.  The
+ *              spinner turns while it runs; on_job_done() appends
+ *              the response to the output panel.  Validates that
+ *              all required fields are filled before sending.
  *************************************************************/
 void input_form_run(void)
 {
-    AppState         *st   = app_state_get();
     const ModuleDesc *desc = g_form.desc;
-    const char       *values[FORM_MAX_PARAMS];
-    char              val_bufs[FORM_MAX_PARAMS][128];
     char              cmd[1024];
-    int               i;
-    int               ok = 1;
 
     if (!desc) return;
+
+    /* a second click while parse is still chewing does nothing */
+    if (g_busy) return;
+
+    if (!build_form_command(desc, cmd, sizeof(cmd))) return;
+    start_job(desc, cmd, 0);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PUBLIC — input_form_plot
+   ═══════════════════════════════════════════════════════════ */
+
+/*************************************************************
+ * Function:    input_form_plot
+ * Input:       void
+ * Output:      void
+ * Description: Runs the command first to populate output
+ *              variables (on a worker thread, spinner turning),
+ *              then opens an autonomous graph window when parse
+ *              answers — see on_job_done() and open_plot().
+ *************************************************************/
+void input_form_plot(void)
+{
+    const ModuleDesc *desc = g_form.desc;
+    char              cmd[1024];
+
+    if (!desc || !desc->has_plot) return;
+    if (g_busy) return;
+
+    /* run first; the window opens in on_job_done() once the
+       results are actually in parse */
+    if (!build_form_command(desc, cmd, sizeof(cmd))) return;
+    start_job(desc, cmd, 1);
+}
+
+/*************************************************************
+ * Function:    open_plot
+ * Input:       desc (const ModuleDesc*) — the module just run
+ * Output:      void
+ * Description: Collects the inputs/results report for printing,
+ *              then opens the module's own plot window.  Called
+ *              on the main thread after a Plot job finishes.
+ *************************************************************/
+static void open_plot(const ModuleDesc *desc)
+{
+    /* the inputs just used and the results they gave, for printing
+       under the plot — whichever window opens next picks it up */
+    graph_set_next_report(build_report(desc));
+
+    /* Diagram the specific plot type */
+
+    if      (desc->plot_type == PLOT_MOHR)      graph_window_open_mohr();
+    else if (desc->plot_type == PLOT_BEAM)      graph_window_open_beam();
+    else if (desc->plot_type == PLOT_STRESS)    graph_window_open_stress();
+    else if (desc->plot_type == PLOT_REYNOLDS)  graph_window_open_reynolds();
+    else if (desc->plot_type == PLOT_DARCY)     graph_window_open_darcy();
+    else if (desc->plot_type == PLOT_BERNOULLI) graph_window_open_bernoulli();
+    else if (desc->plot_type == PLOT_ORIFICE)   graph_window_open_orifice();
+    else if (desc->plot_type == PLOT_IDEALGAS)  graph_window_open_idealgas();
+    else if (desc->plot_type == PLOT_HEATCOND)  graph_window_open_heatcond();
+    else if (desc->plot_type == PLOT_SPECHEAT)  graph_window_open_specheat();
+    else if (desc->plot_type == PLOT_MANNING)   graph_window_open_manning();
+    else if (desc->plot_type == PLOT_ASTEROID)  graph_window_open_asteroid();
+    else if (desc->plot_type == PLOT_NAVIER)    graph_window_open_navier();
+    else if (desc->plot_type == PLOT_CHANNEL)   graph_window_open_channel();
+    else                                        graph_window_open(desc);
+
+    /* no window opened (e.g. no data)?  don't let the report wander
+       onto some later, unrelated plot */
+    graph_set_next_report(NULL);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   BACKGROUND JOBS — keep the window alive while parse works
+   ═══════════════════════════════════════════════════════════ */
+
+/*************************************************************
+ * Function:    build_form_command
+ * Input:       desc   (const ModuleDesc*) — current module
+ *              cmd    (char*)  — receives the parse command line
+ *              cmdlen (size_t) — capacity of cmd
+ * Output:      int — 1 if cmd is ready to send, 0 if a required
+ *              field is empty or the line is too long (status
+ *              bar says which)
+ * Description: Reads every field, checks the required ones, and
+ *              assembles the command with md_build_command().
+ *************************************************************/
+static int build_form_command(const ModuleDesc *desc,
+                              char *cmd, size_t cmdlen)
+{
+    const char *values[FORM_MAX_PARAMS];
+    char        val_bufs[FORM_MAX_PARAMS][128];
+    int         i;
+    int         ok = 1;
 
     /* ── read all field values ── */
     for (i = 0; i < desc->n_params; i++)
@@ -230,59 +392,205 @@ void input_form_run(void)
             ok = 0;
         }
     }
-    if (!ok) return;
+    if (!ok) return 0;
 
-    /* ── build and send command ── */
-    if (!md_build_command(desc, values, cmd, sizeof(cmd)))
+    /* ── assemble ── */
+    if (!md_build_command(desc, values, cmd, cmdlen))
     {
         app_status_set("Command too long — check field values");
-        return;
+        return 0;
     }
+    return 1;
+}
+
+/*************************************************************
+ * Function:    start_job
+ * Input:       desc    (const ModuleDesc*) — module being run
+ *              cmd     (const char*)       — command line for parse
+ *              is_plot (int)               — 1 = open the plot after
+ * Output:      void
+ * Description: Echoes the command, starts the spinner, and sends
+ *              the command to parse on a worker thread.  The GTK
+ *              main loop stays free, so the window repaints and
+ *              the spinner turns however long parse takes.
+ *************************************************************/
+static void start_job(const ModuleDesc *desc, const char *cmd, int is_plot)
+{
+    FormJob *job = g_new0(FormJob, 1);
+    GTask   *task;
+
+    job->desc    = desc;
+    job->is_plot = is_plot;
+    g_strlcpy(job->cmd, cmd, sizeof(job->cmd));
 
     app_output_append("< ");
     app_output_append(cmd);
 
-    if (pipe_transact(cmd, st->response_buf, RESPONSE_BUFSIZE))
-        app_output_append(st->response_buf);
+    set_busy(TRUE, desc->label);
+
+    /* the task owns job; g_free runs when the task is finalized */
+    task = g_task_new(NULL, NULL, on_job_done, NULL);
+    g_task_set_task_data(task, job, NULL);
+    g_task_run_in_thread(task, job_thread);
+    g_object_unref(task);
+}
+
+/*************************************************************
+ * Function:    job_thread
+ * Input:       task      — the running GTask
+ *              source    — unused
+ *              task_data — the FormJob
+ *              cancel    — unused
+ * Output:      void
+ * Description: Worker thread.  Talks to parse and nothing else —
+ *              no GTK calls here, GTK only likes the main thread.
+ *              Uses its own buffer, not AppState's response_buf,
+ *              so nothing on the main thread can scribble on it.
+ *************************************************************/
+static void job_thread(GTask *task, gpointer source,
+                       gpointer task_data, GCancellable *cancel)
+{
+    FormJob *job = (FormJob *)task_data;
+
+    (void)source;
+    (void)cancel;
+
+    job->response = g_malloc0(RESPONSE_BUFSIZE);
+    job->ok       = pipe_transact(job->cmd, job->response, RESPONSE_BUFSIZE);
+
+    g_task_return_boolean(task, TRUE);
+}
+
+/*************************************************************
+ * Function:    on_job_done
+ * Input:       source    — unused
+ *              res       — the finished GTask
+ *              user_data — unused
+ * Output:      void
+ * Description: Back on the main thread: shows parse's answer,
+ *              stops the spinner, frees the buttons, and opens
+ *              the plot window if this was a Plot.
+ *************************************************************/
+static void on_job_done(GObject *source, GAsyncResult *res,
+                        gpointer user_data)
+{
+    FormJob *job = (FormJob *)g_task_get_task_data(G_TASK(res));
+
+    (void)source;
+    (void)user_data;
+
+    /* ── the answer ── */
+    if (job->ok)
+        app_output_append(job->response);
     else
         app_output_append("(no response)\n");
 
-    app_status_set("Ran: %s", desc->label);
+    /* idle before plotting: the plot window asks parse for its
+       vectors, and those requests must not look like a second job */
+    set_busy(FALSE, NULL);
+    app_status_set("Ran: %s", job->desc->label);
+
+    if (job->is_plot && job->ok)
+        open_plot(job->desc);
+
+    g_free(job->response);
+    g_free(job);
 }
 
-/* ═══════════════════════════════════════════════════════════
-   PUBLIC — input_form_plot
-   ═══════════════════════════════════════════════════════════ */
+/*************************************************************
+ * Function:    set_busy
+ * Input:       busy  (gboolean)    — TRUE while parse is working
+ *              label (const char*) — module name for the status
+ *                                    bar; ignored when busy is FALSE
+ * Output:      void
+ * Description: Shows the busy row and spins the spinner, greys
+ *              out Run, Plot and the command bar so nothing else
+ *              talks to parse mid-calculation — or puts it all back.
+ *************************************************************/
+static void set_busy(gboolean busy, const char *label)
+{
+    AppState *st = app_state_get();
+
+    g_busy = busy;
+
+    if (g_form.spinner)
+    {
+        gtk_widget_set_visible(g_form.busy_row, busy);
+        if (busy) gtk_spinner_start(GTK_SPINNER(g_form.spinner));
+        else      gtk_spinner_stop (GTK_SPINNER(g_form.spinner));
+    }
+
+    /* greyed out AND faded: the button gradients hide GTK's own
+       disabled look, so the fade is what tells the eye "not now" */
+    if (g_form.run_btn)
+    {
+        gtk_widget_set_sensitive(g_form.run_btn, !busy);
+        gtk_widget_set_opacity  (g_form.run_btn, busy ? 0.4 : 1.0);
+    }
+    if (g_form.plot_btn)
+    {
+        gtk_widget_set_sensitive(g_form.plot_btn, !busy);
+        gtk_widget_set_opacity  (g_form.plot_btn, busy ? 0.4 : 1.0);
+    }
+    if (st->cmd_entry)   gtk_widget_set_sensitive(st->cmd_entry,   !busy);
+
+    if (busy)
+        app_status_set("Calculating: %s — please wait …", label);
+}
 
 /*************************************************************
- * Function:    input_form_plot
- * Input:       void
- * Output:      void
- * Description: Runs the command first to populate output
- *              variables, then opens an autonomous graph window.
+ * Function:    build_report
+ * Input:       desc (const ModuleDesc*) — the module just plotted
+ * Output:      GraphReport* — caller owns (see graph.h)
+ * Description: Inputs: every form field the user filled in, as
+ *              typed, with its units — blank optional fields are
+ *              left out, as they were left out of the command.
+ *              Results: every scalar output in the descriptor,
+ *              read back from parse.  Vectors are the plot itself,
+ *              and outputs this run did not set (parse answers
+ *              "Unknown variable") are skipped.
  *************************************************************/
-void input_form_plot(void)
+static GraphReport *build_report(const ModuleDesc *desc)
 {
-    const ModuleDesc *desc = g_form.desc;
+    GraphReport *r = graph_report_new();
+    char         buf[128];
+    char         query[64];
+    char         response[256];
+    const char  *val;
+    char        *end;
+    int          i;
 
-    if (!desc || !desc->has_plot) return;
+    /* ── inputs, straight from the form ── */
+    for (i = 0; i < desc->n_params; i++)
+    {
+        val = read_widget(g_form.widgets[i], &desc->params[i],
+                          buf, sizeof(buf));
+        if (!val || val[0] == '\0') continue;
 
-    input_form_run();
+        graph_report_add(r, 0, desc->params[i].label, val,
+                         desc->params[i].units);
+    }
 
-    /* Diagram the specific plot type */
+    /* ── results, asked of parse one scalar at a time ── */
+    for (i = 0; i < desc->n_outputs; i++)
+    {
+        if (desc->outputs[i].is_vector) continue;
 
-    if      (desc->plot_type == PLOT_MOHR)      graph_window_open_mohr();
-    else if (desc->plot_type == PLOT_BEAM)      graph_window_open_beam();
-    else if (desc->plot_type == PLOT_STRESS)    graph_window_open_stress();
-    else if (desc->plot_type == PLOT_REYNOLDS)  graph_window_open_reynolds();
-    else if (desc->plot_type == PLOT_DARCY)     graph_window_open_darcy();
-    else if (desc->plot_type == PLOT_BERNOULLI) graph_window_open_bernoulli();
-    else if (desc->plot_type == PLOT_ORIFICE)   graph_window_open_orifice();
-    else if (desc->plot_type == PLOT_IDEALGAS)  graph_window_open_idealgas();
-    else if (desc->plot_type == PLOT_HEATCOND)  graph_window_open_heatcond();
-    else if (desc->plot_type == PLOT_SPECHEAT)  graph_window_open_specheat();
-    else if (desc->plot_type == PLOT_MANNING)   graph_window_open_manning();    
-    else                                        graph_window_open(desc);
+        snprintf(query, sizeof(query), "$%s\n", desc->outputs[i].var_name);
+        if (!pipe_transact(query, response, sizeof(response))) continue;
+        if (strncmp(response, "Unknown", 7) == 0) continue;
+
+        /* trim the newline parse ends every answer with */
+        end = response + strlen(response) - 1;
+        while (end >= response && (*end == '\n' || *end == '\r' || *end == ' '))
+            *end-- = '\0';
+        if (response[0] == '\0') continue;
+
+        graph_report_add(r, 1, desc->outputs[i].label, response,
+                         desc->outputs[i].units);
+    }
+
+    return r;
 }
 
 /* ═══════════════════════════════════════════════════════════

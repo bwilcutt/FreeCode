@@ -86,7 +86,10 @@ typedef enum
     PLOT_IDEALGAS,
     PLOT_HEATCOND,
     PLOT_SPECHEAT,
-    PLOT_MANNING
+    PLOT_MANNING,
+    PLOT_ASTEROID,
+    PLOT_NAVIER,
+    PLOT_CHANNEL
 } PlotType;
 
 /* ═══════════════════════════════════════════════════════════
