@@ -15,6 +15,9 @@
 #include "pid.h"
 #include "csv.h"
 #include "fft.h"
+#include "asteroid.h"
+#include "navier.h"
+#include "channel.h"
 #include "dump.h"
 #include "mathfuncs.h"
 
@@ -933,6 +936,22 @@ void print_help()
         "    darcy f=<> L=<> D=<> V=<> [units=si|us]\n"
         "    -> stores $darcy_hf, $darcy_dP_rho\n"
         "\n"
+        "  Navier-Stokes (lid-driven cavity, 2D, steady)\n"
+        "    navier Re=<> [N=<grid>] [tol=<>] [maxit=<>]\n"
+        "    navier V=<> D=<> nu=<>   (Re from reynolds; or no args to use $Re)\n"
+        "    navier ?             full usage\n"
+        "    -> stores $navier_psimin, $navier_xc, $navier_yc, $navier_err\n"
+        "    -> centrelines $navier_y/$navier_u, $navier_x/$navier_v\n"
+        "    -> fields $navier_psi, $navier_w, $navier_ufield, $navier_vfield\n"
+        "\n"
+        "  Channel flow past a cylinder (2D, DFG benchmark defaults)\n"
+        "    channel [Re=<>] [U=<>] [nu=<>] [rho=<>] [L=<> H=<>]\n"
+        "            [cx=<> cy=<> D=<>] [res=<>] [t=<>] [tol=<>]\n"
+        "    channel ?            full usage\n"
+        "    -> stores $channel_cd, $channel_cl, $channel_dp, $channel_st\n"
+        "    -> history $channel_tv/$channel_cdv/$channel_clv\n"
+        "    -> fields $channel_ufield, $channel_vfield, $channel_pfield, $channel_wfield\n"
+        "\n"
         "  Bernoulli's Equation\n"
         "    bernoulli P1=<> V1=<> z1=<> P2=<> V2=<> z2=<> [rho=<>] solve=<P1|V1|z1|P2|V2|z2>\n"
         "    -> stores $bern_P1/V1/z1/P2/V2/z2\n"
@@ -989,6 +1008,17 @@ void print_help()
         "             cc=Cohen-Coon\n"
         "\n"
         "    pid reset            zero $pid_integral and $pid_prev_err\n"
+        "\n"
+        "  ── Astrodynamics ─────────────────────────────────────\n"
+        "  Asteroid Impact Screening  (two-body, Earth + Moon offset)\n"
+        "    asteroid a=<AU> e=<> i=<deg> om=<deg> w=<deg> M=<deg> epoch=<JD>\n"
+        "             [start=<JD>] [span=<days>] [step=<days>]\n"
+        "             [sa= se= si= som= sw= sM=]  1-sigma of each element\n"
+        "    -> elements as listed by JPL's Small-Body Database\n"
+        "    -> stores $asteroid_dmin, $asteroid_tca, $asteroid_vrel,\n"
+        "              $asteroid_bcap, $asteroid_hit (1 = impact),\n"
+        "              $asteroid_prob (impact probability, 0..1)\n"
+        "    -> distance curve in $asteroid_d (lunar distances), $asteroid_t (days)\n"
         "\n"
         "  ── Signal Processing ─────────────────────────────────\n"
         "  Load CSV data\n"
@@ -1135,6 +1165,8 @@ int main()
         if (strncmp(inputLine, "bernoulli",   9)  == 0)    { run_bernoulli(inputLine + 9); continue; }
         if (strncmp(inputLine, "orifice",     7)  == 0)    { run_orifice(inputLine + 7);   continue; }
         if (strncmp(inputLine, "darcy",       5)  == 0)    { run_darcy(inputLine + 5);     continue; }
+        if (strncmp(inputLine, "navier",      6)  == 0)    { run_navier(inputLine + 6);    continue; }
+        if (strncmp(inputLine, "channel",     7)  == 0)    { run_channel(inputLine + 7);   continue; }
  
         /* ── Structural mechanics ── */
         if (strncmp(inputLine, "stress",      6)  == 0)    { run_stress(inputLine + 6);    continue; }
@@ -1148,6 +1180,9 @@ int main()
 
         /* ── Control systems ── */
         if (strncmp(inputLine, "pid",         3)  == 0)    { run_pid(inputLine + 3);       continue; }
+
+        /* ── Astrodynamics ── */
+        if (strncmp(inputLine, "asteroid",    8)  == 0)    { run_asteroid(inputLine + 8);  continue; }
  
         /* ── Signal / FFT ── */
         if (strncmp(inputLine, "load",        4)  == 0)    { run_load(inputLine + 4);      continue; }

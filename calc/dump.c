@@ -9,8 +9,16 @@
  * Description: Parses the first $-prefixed token from args to
  *              get the variable name, looks it up in the matrix
  *              variable table via get_mat_var(), then prints
- *              all elements one per line between dump:begin and
+ *              the elements one per line between dump:begin and
  *              dump:end markers.
+ *
+ *              Optional paging, for arrays too big for one reply:
+ *                dump $var start=<first> count=<how many>
+ *              Elements are numbered from 0 in storage order
+ *              (row by row).  start defaults to 0, count to "all
+ *              the rest"; a page that runs off the end is cut
+ *              short, and N in dump:begin is what was actually
+ *              sent.  Plain "dump $var" is unchanged.
  *
  *              Output format:
  *                dump:begin <N>
@@ -23,6 +31,8 @@
  *              reads scalar results directly from parse output.
  *              If the variable is not found, prints:
  *                dump:error unknown variable $<name>
+ *              If start is past the end, prints:
+ *                dump:error start <s> is past the end (<n> values)
  *************************************************************/
 void run_dump(const char *args)
 {
@@ -32,6 +42,11 @@ void run_dump(const char *args)
     Matrix     *mat;
     int         n;
     int         i;
+    double      start_d = 0.0;
+    double      count_d = -1.0;
+    int         found   = 0;
+    int         first;
+    int         last;
 
     memset(varName, 0, sizeof(varName));
 
@@ -59,10 +74,27 @@ void run_dump(const char *args)
         return;
     }
 
-    /* ── emit block ── */
     n = mat->rows * mat->cols;
-    printf("dump:begin %d\n", n);
-    for (i = 0; i < n; i++)
+
+    /* ── optional page: start=<first element> count=<how many>.
+          Read from what follows the name, so "$var" itself never
+          gets mistaken for a parameter ── */
+    parse_named_param(scanPtr, "start", &start_d, &found);
+    parse_named_param(scanPtr, "count", &count_d, &found);
+
+    first = (start_d > 0.0) ? (int)start_d : 0;
+    if (first >= n && n > 0)
+    {
+        printf("dump:error start %d is past the end (%d values)\n", first, n);
+        return;
+    }
+
+    /* no count, or one that overshoots: everything to the end */
+    last = (count_d < 0.0 || first + (int)count_d > n) ? n : first + (int)count_d;
+
+    /* ── emit block: N is what this page actually holds ── */
+    printf("dump:begin %d\n", last - first);
+    for (i = first; i < last; i++)
         printf("%-.17g\n", mat->data[i]);
     printf("dump:end\n");
 }

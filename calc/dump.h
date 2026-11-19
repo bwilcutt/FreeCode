@@ -22,6 +22,14 @@
  * graph.c detect the block unambiguously even if other output
  * surrounds it.
  *
+ * Paging, for arrays too big for one reply:
+ *
+ *   dump $varname start=<first> count=<how many>
+ *
+ * sends only that slice (elements numbered from 0, row by row);
+ * N is then the slice length.  Without start/count, the whole
+ * array goes, exactly as before.
+ *
  * If the variable does not exist or is not a matrix variable,
  * an error line is printed and no begin/end block is emitted.
  *************************************************************/
