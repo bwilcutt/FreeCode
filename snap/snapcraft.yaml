@@ -9,6 +9,8 @@
 #               $SNAP/bin/parse, right where main_gui.c's
 #               resolve_parse_path() looks for it, so nothing
 #               needs to be on the installing computer's PATH.
+#               The user manual rides along at
+#               $SNAP/doc/Mathrix_User_Manual.pdf.
 #
 # Lives in:     ~/FreeCode/snap/snapcraft.yaml
 # Build with:   cd ~/FreeCode && snapcraft
@@ -76,3 +78,13 @@ parts:
           -o mathrix *.c "$CALC/PipeMgr/pipe_mgr.c" \
           $(pkg-config --libs gtk4) -lm
       install -D -m 0755 mathrix "$CRAFT_PART_INSTALL/bin/mathrix"
+
+  manual:
+    plugin: nil
+    source: Mathrix                      # ~/FreeCode/Mathrix
+    override-build: |
+      # The PDF goes inside the snap: strict confinement won't let an
+      # install drop files into anyone's home folder, however politely
+      # it asks.  Installed, it lives at /snap/mathrix/current/doc/.
+      install -D -m 0644 Mathrix_User_Manual.pdf \
+          "$CRAFT_PART_INSTALL/doc/Mathrix_User_Manual.pdf"
