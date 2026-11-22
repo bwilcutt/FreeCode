@@ -23,6 +23,8 @@ static void     on_module_selected (GSimpleAction *action, GVariant *param,
                                     gpointer user_data);
 static void     on_about           (GSimpleAction *action, GVariant *param,
                                     gpointer user_data);
+static void     on_manual          (GSimpleAction *action, GVariant *param,
+                                    gpointer user_data);
 static void     on_clear           (GSimpleAction *action, GVariant *param,
                                     gpointer user_data);
 static void     on_quit            (GSimpleAction *action, GVariant *param,
@@ -105,29 +107,30 @@ static const char *CSS =
     "  color: " MX_CRUST ";"
     "}"
 
-    /* ── menubar ── */
+    /* ── menubar (a GtkPopoverMenuBar: one widget for the whole row, so
+          moving from one open menu to the next takes one click, not two) ── */
     ".mathrix-menubar {"
     "  background-color: " MX_MANTLE ";"
-    "  padding: 2px 8px;"
+    "  padding: 4px 8px;"
     "}"
-    ".mathrix-menubar-inner {"
-    "  background-color: " MX_MANTLE ";"
-    "  padding: 2px 8px;"
-    "}"
-    ".mathrix-menubar button,"
-    ".mathrix-menubar-inner button {"
+    ".mathrix-menubar > item {"
     "  color: " MX_TEXT ";"
-    "  background: transparent;"
-    "  border: none;"
     "  border-radius: 6px;"
     "  padding: 5px 14px;"
     "  font-size: 13px;"
     "  font-weight: 500;"
     "}"
-    ".mathrix-menubar button:hover,"
-    ".mathrix-menubar-inner button:hover {"
+    ".mathrix-menubar > item:hover,"
+    ".mathrix-menubar > item:selected {"
     "  background-color: " MX_SURFACE0 ";"
     "  color: " MX_BLUE ";"
+    "}"
+    /* the old divider between Help and the module menus: a thin line
+       left of the third item (File and Help are always first) */
+    ".mathrix-menubar > item:nth-child(3) {"
+    "  margin-left: 10px;"
+    "  border-left: 1px solid " MX_SURFACE0 ";"
+    "  border-radius: 0 6px 6px 0;"
     "}"
 
     /* ── command entry bar ── */
@@ -393,7 +396,13 @@ static const char *CSS =
     "  color: " MX_TEXT ";"
     "  min-height: 30px;"
     "}"
-    "popover.menu modelbutton:hover {"
+    /* :selected is GTK's own highlight for the item it pre-picks when a
+       menu opens (the first one) — left to the system theme it was a
+       near-white bar under our white text: a fine way to hide "Clear
+       output" in plain sight.  Same look as hover now. */
+    "popover.menu modelbutton:hover,"
+    "popover.menu modelbutton:selected,"
+    "popover.menu modelbutton:focus-visible {"
     "  background-color: " MX_SURFACE0 ";"
     "  color: " MX_BLUE ";"
     "}"
@@ -460,111 +469,69 @@ static const char *CSS =
  * Function:    build_menu_bar
  * Input:       box (GtkWidget*) — vertical box to append into
  * Output:      void
- * Description: Builds the horizontal menu bar.  The first row
- *              contains File, Edit, and View items followed by
- *              one button per module category (auto-built from
- *              the descriptor table).  Each category button
- *              opens a GtkPopoverMenu listing the modules in
- *              that category.  Selecting a module triggers
- *              on_module_selected() which loads the input form.
+ * Description: Builds the horizontal menu bar: File and Help,
+ *              then one menu per module category (auto-built
+ *              from the descriptor table), each listing the
+ *              modules in that category.  Selecting a module
+ *              triggers on_module_selected() via the app.module
+ *              action, which loads the input form.
+ *
+ *              The whole row is one GtkPopoverMenuBar built from a
+ *              GMenu model.  A row of separate GtkMenuButtons looks
+ *              the same but each open menu swallows the next click
+ *              to close itself, so every switch took two clicks.
  *************************************************************/
 static void build_menu_bar(GtkWidget *box)
 {
-    GtkWidget   *bar;
-    GtkWidget   *hbox;
-    GtkWidget   *btn;
-    GtkWidget   *popover;
-    GtkWidget   *pop_box;
-    GtkWidget   *item_btn;
-    const char  *cats[32];
-    int          n_cats;
-    int          i;
-    int          j;
+    GMenu            *model = g_menu_new();
+    GMenu            *sub;
+    GMenuItem        *item;
+    GtkWidget        *menubar;
+    const char       *cats[32];
     const ModuleDesc *mods[32];
-    int          n_mods;
-
-    bar  = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-    hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 2);
-    gtk_widget_add_css_class(bar,  "mathrix-menubar");
-    gtk_widget_add_css_class(hbox, "mathrix-menubar-inner");
+    int               n_cats;
+    int               n_mods;
+    int               i;
+    int               j;
 
     /* ── File menu ── */
-    {
-        GMenu    *gmenu  = g_menu_new();
-        GMenuItem *clear = g_menu_item_new("Clear output", "app.clear");
-        GMenuItem *quit  = g_menu_item_new("Quit",         "app.quit");
-        g_menu_append_item(gmenu, clear);
-        g_menu_append_item(gmenu, quit);
-        g_object_unref(clear);
-        g_object_unref(quit);
-
-        btn     = gtk_menu_button_new();
-        popover = gtk_popover_menu_new_from_model(G_MENU_MODEL(gmenu));
-        gtk_menu_button_set_label(GTK_MENU_BUTTON(btn), "File");
-        gtk_menu_button_set_popover(GTK_MENU_BUTTON(btn), popover);
-        gtk_widget_set_focus_on_click(btn, FALSE);
-        gtk_widget_add_css_class(btn, "mathrix-menubar");
-        gtk_box_append(GTK_BOX(hbox), btn);
-        g_object_unref(gmenu);
-    }
+    sub = g_menu_new();
+    g_menu_append(sub, "Clear output", "app.clear");
+    g_menu_append(sub, "Quit",         "app.quit");
+    g_menu_append_submenu(model, "File", G_MENU_MODEL(sub));
+    g_object_unref(sub);
 
     /* ── Help menu ── */
-    {
-        GMenu    *gmenu = g_menu_new();
-        GMenuItem *about = g_menu_item_new("About Mathrix", "app.about");
-        g_menu_append_item(gmenu, about);
-        g_object_unref(about);
+    sub = g_menu_new();
+    g_menu_append(sub, "User Manual",   "app.manual");
+    g_menu_append(sub, "About Mathrix", "app.about");
+    g_menu_append_submenu(model, "Help", G_MENU_MODEL(sub));
+    g_object_unref(sub);
 
-        btn     = gtk_menu_button_new();
-        popover = gtk_popover_menu_new_from_model(G_MENU_MODEL(gmenu));
-        gtk_menu_button_set_label(GTK_MENU_BUTTON(btn), "Help");
-        gtk_menu_button_set_popover(GTK_MENU_BUTTON(btn), popover);
-        gtk_widget_set_focus_on_click(btn, FALSE);
-        gtk_widget_add_css_class(btn, "mathrix-menubar");
-        gtk_box_append(GTK_BOX(hbox), btn);
-        g_object_unref(gmenu);
-    }
-
-    /* ── separator ── */
-    gtk_box_append(GTK_BOX(hbox),
-        gtk_separator_new(GTK_ORIENTATION_VERTICAL));
-
-    /* ── one button per module category ── */
+    /* ── one menu per module category; each item fires app.module
+          with the module's command name as its target ── */
     n_cats = md_categories(cats, 32);
     for (i = 0; i < n_cats; i++)
     {
-        n_mods  = md_in_category(cats[i], mods, 32);
-        pop_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
-        gtk_widget_set_margin_start(pop_box, 4);
-        gtk_widget_set_margin_end(pop_box, 4);
-        gtk_widget_set_margin_top(pop_box, 4);
-        gtk_widget_set_margin_bottom(pop_box, 4);
-
+        sub    = g_menu_new();
+        n_mods = md_in_category(cats[i], mods, 32);
         for (j = 0; j < n_mods; j++)
         {
-            item_btn = gtk_button_new_with_label(mods[j]->label);
-            gtk_actionable_set_action_name(
-                GTK_ACTIONABLE(item_btn), "app.module");
-            gtk_actionable_set_action_target_value(
-                GTK_ACTIONABLE(item_btn),
-                g_variant_new_string(mods[j]->command));
-            gtk_widget_add_css_class(item_btn, "mathrix-menubar-inner");
-            gtk_box_append(GTK_BOX(pop_box), item_btn);
+            item = g_menu_item_new(mods[j]->label, NULL);
+            g_menu_item_set_action_and_target_value(
+                item, "app.module", g_variant_new_string(mods[j]->command));
+            g_menu_append_item(sub, item);
+            g_object_unref(item);
         }
-
-        popover = gtk_popover_new();
-        gtk_popover_set_child(GTK_POPOVER(popover), pop_box);
-
-        btn = gtk_menu_button_new();
-        gtk_menu_button_set_label(GTK_MENU_BUTTON(btn), cats[i]);
-        gtk_menu_button_set_popover(GTK_MENU_BUTTON(btn), popover);
-        gtk_widget_set_focus_on_click(btn, FALSE);
-        gtk_widget_add_css_class(btn, "mathrix-menubar");
-        gtk_box_append(GTK_BOX(hbox), btn);
+        g_menu_append_submenu(model, cats[i], G_MENU_MODEL(sub));
+        g_object_unref(sub);
     }
 
-    gtk_box_append(GTK_BOX(bar),  hbox);
-    gtk_box_append(GTK_BOX(box),  bar);
+    /* ── the bar itself; it keeps its own reference to the model ── */
+    menubar = gtk_popover_menu_bar_new_from_model(G_MENU_MODEL(model));
+    gtk_widget_add_css_class(menubar, "mathrix-menubar");
+    gtk_box_append(GTK_BOX(box), menubar);
+    g_object_unref(model);
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -864,6 +831,118 @@ static void on_about(GSimpleAction *action, GVariant *param,
     gtk_window_present(GTK_WINDOW(dialog));
 }
 
+/* the manual's file name, looked for in the places listed in
+   find_manual() below */
+#define MANUAL_FILE  "Mathrix_User_Manual.pdf"
+
+/*************************************************************
+ * Function:    find_manual
+ * Input:       out    (char*)  — receives the full path when found
+ *              outlen (size_t) — capacity of out
+ * Output:      gboolean — TRUE if the manual was found
+ * Description: Looks for the manual in the same spirit as
+ *              resolve_parse_path(): inside the snap first, then
+ *              beside the Mathrix program itself, then in the
+ *              folder Mathrix was started from (a dev build run
+ *              from ~/FreeCode/Mathrix), then a normal install's
+ *              documentation folder.  First one that exists wins.
+ *************************************************************/
+static gboolean find_manual(char *out, size_t outlen)
+{
+    const char *snap_dir = getenv("SNAP");
+    char       *exe_path = g_file_read_link("/proc/self/exe", NULL);
+    char       *exe_dir  = exe_path ? g_path_get_dirname(exe_path) : NULL;
+    char       *cwd      = g_get_current_dir();
+    const char *dirs[4];
+    int         n = 0;
+    int         i;
+    gboolean    found = FALSE;
+
+    /* candidate folders, best first; a missing one is just skipped */
+    if (snap_dir && snap_dir[0]) dirs[n++] = snap_dir;
+    if (exe_dir)                 dirs[n++] = exe_dir;
+    dirs[n++] = cwd;
+    dirs[n++] = "/usr/share/doc/mathrix";
+
+    for (i = 0; i < n && !found; i++)
+    {
+        snprintf(out, outlen, "%s/%s", dirs[i], MANUAL_FILE);
+        found = g_file_test(out, G_FILE_TEST_IS_REGULAR);
+    }
+
+    g_free(exe_path);
+    g_free(exe_dir);
+    g_free(cwd);
+    return found;
+}
+
+/*************************************************************
+ * Function:    on_manual_opened
+ * Input:       source    (GObject*)      — the GtkFileLauncher
+ *              result    (GAsyncResult*) — outcome of the launch
+ *              user_data (gpointer)      — unused
+ * Output:      void
+ * Description: Reports whether the PDF viewer actually started.
+ *              The usual failure is a computer with no PDF viewer
+ *              installed, which no amount of retrying will fix.
+ *************************************************************/
+static void on_manual_opened(GObject *source, GAsyncResult *result,
+                             gpointer user_data)
+{
+    GError *err = NULL;
+
+    (void)user_data;
+    if (gtk_file_launcher_launch_finish(GTK_FILE_LAUNCHER(source), result, &err))
+        app_status_set("User manual opened");
+    else
+    {
+        app_status_set("Could not open the user manual — is a PDF viewer installed?");
+        g_clear_error(&err);
+    }
+    g_object_unref(source);
+}
+
+/*************************************************************
+ * Function:    on_manual
+ * Input:       action    (GSimpleAction*) — unused
+ *              param     (GVariant*)      — unused
+ *              user_data (gpointer)       — unused
+ * Output:      void
+ * Description: Help → User Manual.  Finds the PDF and hands it to
+ *              the computer's own PDF viewer.  GtkFileLauncher goes
+ *              through the desktop portal, so this works from inside
+ *              the snap too.
+ *************************************************************/
+static void on_manual(GSimpleAction *action, GVariant *param,
+                      gpointer user_data)
+{
+    AppState        *st = app_state_get();
+    char             path[1024];
+    GFile           *file;
+    GtkFileLauncher *launcher;
+
+    (void)action;
+    (void)param;
+    (void)user_data;
+
+    if (!find_manual(path, sizeof(path)))
+    {
+        /* say what is missing and where it should go */
+        app_status_set("User manual not found — put " MANUAL_FILE
+                       " in the same folder as the Mathrix program");
+        app_output_append("Could not find the user manual (" MANUAL_FILE ").\n"
+                          "It belongs in the same folder as the Mathrix program.\n\n");
+        return;
+    }
+
+    /* the launcher is freed in on_manual_opened once the viewer starts */
+    file     = g_file_new_for_path(path);
+    launcher = gtk_file_launcher_new(file);
+    g_object_unref(file);
+    gtk_file_launcher_launch(launcher, GTK_WINDOW(st->window), NULL,
+                             on_manual_opened, NULL);
+}
+
 /*************************************************************
  * Function:    on_clear
  * Input:       action    (GSimpleAction*) — unused
@@ -1040,6 +1119,7 @@ static void on_activate(GtkApplication *app, gpointer user_data)
     GSimpleAction    *act;
     const GActionEntry app_actions[] = {
         { "about",  on_about,  NULL, NULL, NULL },
+        { "manual", on_manual, NULL, NULL, NULL },
         { "clear",  on_clear,  NULL, NULL, NULL },
         { "quit",   on_quit,   NULL, NULL, NULL },
         { "module", on_module_selected, "s", NULL, NULL },
