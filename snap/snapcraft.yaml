@@ -22,7 +22,7 @@
 
 name: mathrix
 base: core24                 # Ubuntu 24.04 runtime
-version: '1.0.1'             # keep in step with MATHRIX_VERSION in app_state.h
+version: '1.2.0'             # keep in step with MATHRIX_VERSION in app_state.h
 summary: Unit-aware engineering computation
 description: |
   Mathrix is a GTK4 engineering computation application.  The
@@ -38,7 +38,15 @@ apps:
   mathrix:
     command: bin/mathrix
     extensions: [gnome]      # supplies GTK4, fonts, themes, display access
-    plugs: [home]            # let it read/write files in the user's home
+    plugs:
+      - home                 # let it read/write files in the user's home
+      - network              # Known asteroid picker downloads orbits from NASA JPL
+    environment:
+      # Ask the GNOME settings, not the desktop portal, whether to use a
+      # proxy.  The portal refuses that question from inside the snap
+      # ("not available inside the sandbox"), and GLib then gives up on
+      # the connection entirely — so JPL looked unreachable.
+      GIO_USE_PROXY_RESOLVER: gnome
 
   parse:
     command: bin/parse
@@ -66,7 +74,12 @@ parts:
   mathrix:
     plugin: nil
     source: Mathrix                      # ~/FreeCode/Mathrix
-    build-packages: [gcc, pkg-config]
+    build-packages: [gcc, pkg-config, libsoup-3.0-dev, libjson-glib-dev]
+    # libsoup (the download) and json-glib (reading JPL's reply) for the
+    # Known asteroid picker are needed to BUILD only.  At run time the
+    # GNOME runtime already supplies both, plus the module that does the
+    # secure (HTTPS) part.  Do not stage them: packed copies sit in front
+    # of the runtime's and break HTTPS — tried it, JPL went unreachable.
     override-build: |
       # Mathrix borrows two things from the calc tree:
       #   calc/Algo/graph_data.h   (shared GraphData struct)
@@ -74,9 +87,9 @@ parts:
       # CRAFT_PROJECT_DIR is ~/FreeCode as seen by the builder.
       CALC="$CRAFT_PROJECT_DIR/calc"
       gcc -O2 -I. -I"$CALC/Algo" -I"$CALC/PipeMgr" \
-          $(pkg-config --cflags gtk4) \
+          $(pkg-config --cflags gtk4 libsoup-3.0 json-glib-1.0) \
           -o mathrix *.c "$CALC/PipeMgr/pipe_mgr.c" \
-          $(pkg-config --libs gtk4) -lm
+          $(pkg-config --libs gtk4 libsoup-3.0 json-glib-1.0) -lm
       install -D -m 0755 mathrix "$CRAFT_PART_INSTALL/bin/mathrix"
 
   manual:

@@ -15,7 +15,7 @@
 #include <gtk/gtk.h>
 #include "module_desc.h"
 
-#define MATHRIX_VERSION  "1.0.0"
+#define MATHRIX_VERSION  "1.2.0"
 #define PARSE_BINARY     "//usr//bin//parse"  // Parse should be in /usr/bin and in the path.
 #define RESPONSE_BUFSIZE (65536)
 

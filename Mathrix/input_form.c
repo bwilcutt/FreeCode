@@ -18,6 +18,7 @@
 #include "channel_graph.h"
 #include "slittest_graph.h"
 #include "schrodinger_graph.h"
+#include "asteroid_lookup.h"
 #include "pipe_mgr.h"
 
 #include <gtk/gtk.h>
@@ -161,6 +162,11 @@ void input_form_load(const ModuleDesc *desc, GtkWidget *form_box)
     gtk_widget_set_margin_top(sep, 4);
     gtk_widget_set_margin_bottom(sep, 8);
     gtk_box_append(GTK_BOX(form_box), sep);
+
+    /* ── asteroid only: pick a known asteroid and its orbit is
+          downloaded into the fields below ── */
+    if (strcmp(desc->command, "asteroid") == 0)
+        gtk_box_append(GTK_BOX(form_box), asteroid_lookup_row(desc, g_form.widgets));
 
     /* ── parameter grid ── */
     grid = gtk_grid_new();

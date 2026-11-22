@@ -841,7 +841,8 @@ static void on_about(GSimpleAction *action, GVariant *param,
  *              outlen (size_t) — capacity of out
  * Output:      gboolean — TRUE if the manual was found
  * Description: Looks for the manual in the same spirit as
- *              resolve_parse_path(): inside the snap first, then
+ *              resolve_parse_path(): inside the snap first (its
+ *              doc/ folder, where snapcraft.yaml installs it), then
  *              beside the Mathrix program itself, then in the
  *              folder Mathrix was started from (a dev build run
  *              from ~/FreeCode/Mathrix), then a normal install's
@@ -850,6 +851,8 @@ static void on_about(GSimpleAction *action, GVariant *param,
 static gboolean find_manual(char *out, size_t outlen)
 {
     const char *snap_dir = getenv("SNAP");
+    char       *snap_doc = (snap_dir && snap_dir[0])
+                           ? g_build_filename(snap_dir, "doc", NULL) : NULL;
     char       *exe_path = g_file_read_link("/proc/self/exe", NULL);
     char       *exe_dir  = exe_path ? g_path_get_dirname(exe_path) : NULL;
     char       *cwd      = g_get_current_dir();
@@ -859,7 +862,7 @@ static gboolean find_manual(char *out, size_t outlen)
     gboolean    found = FALSE;
 
     /* candidate folders, best first; a missing one is just skipped */
-    if (snap_dir && snap_dir[0]) dirs[n++] = snap_dir;
+    if (snap_doc)                dirs[n++] = snap_doc;
     if (exe_dir)                 dirs[n++] = exe_dir;
     dirs[n++] = cwd;
     dirs[n++] = "/usr/share/doc/mathrix";
@@ -870,6 +873,7 @@ static gboolean find_manual(char *out, size_t outlen)
         found = g_file_test(out, G_FILE_TEST_IS_REGULAR);
     }
 
+    g_free(snap_doc);
     g_free(exe_path);
     g_free(exe_dir);
     g_free(cwd);
