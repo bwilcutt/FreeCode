@@ -16,6 +16,7 @@ static const char *heat_solve_choices[] = { "Q", "k", "A", "L", "T1", "T2", NULL
 static const char *pid_mode_choices[]   = { "sim", "step", "tune", "reset", NULL };
 static const char *pid_type_choices[]   = { "PID", "PI", "P", NULL };
 static const char *pid_method_choices[] = { "zn", "znol", "cc", NULL };
+static const char *sch_units_choices[]  = { "au", "ev", NULL };
 
 /* ═══════════════════════════════════════════════════════════
    DESCRIPTOR TABLE
@@ -28,7 +29,7 @@ const ModuleDesc modules[] =
     {
         "reynolds",
         "Reynolds Number",
-        "Fluid Mechanics",
+        "Fluids",
         "Calculates the Reynolds number to classify flow regime",
         {
             { "V",   "Velocity",          "m/s",    PT_SCALAR, NULL, NULL, 1,
@@ -54,7 +55,7 @@ const ModuleDesc modules[] =
     {
         "navier",
         "Navier-Stokes Cavity",
-        "Fluid Mechanics",
+        "Fluids",
         "Steady 2D flow in a square box whose lid slides sideways, checked "
         "against the published Ghia (1982) results at Re = 100, 400 and 1000",
         {
@@ -100,7 +101,7 @@ const ModuleDesc modules[] =
     {
         "channel",
         "Channel Flow (Cylinder)",
-        "Fluid Mechanics",
+        "Fluids",
         "Flow through a channel past a cylinder: drag, lift, pressure drop and "
         "vortex shedding.  Defaults are the DFG benchmark (Schäfer & Turek 1996)",
         {
@@ -152,6 +153,50 @@ const ModuleDesc modules[] =
         1, PLOT_CHANNEL, "Channel Flow Past a Cylinder"
     },
 
+    /* ── Two Slits Against One ─────────────────────────────── */
+    {
+        "slittest",
+        "Two Slits Against One",
+        "Fluids",
+        "Does a fluid make a double-slit pattern?  Massless particles ride the "
+        "flow through two slits, then one, and are scored against wave optics "
+        "over a range of Reynolds numbers.  Takes a few minutes",
+        {
+            { "Re_min",   "Lowest Reynolds no.",  "",  PT_SCALAR, NULL, "10",   0,
+              "Start of the sweep, measured on the jet through a slit" },
+            { "Re_max",   "Highest Reynolds no.", "",  PT_SCALAR, NULL, "1000", 0,
+              "End of the sweep.  Past about 1000, raise Grid cells across "
+              "or the fluid acts thicker than asked" },
+            { "Re_steps", "Reynolds numbers",     "",  PT_SCALAR, NULL, "8",    0,
+              "How many to try, evenly spread on a log scale.  Each one "
+              "takes about 15 seconds" },
+            { "a",        "Slit width",           "m", PT_SCALAR, NULL, "0.02", 0,
+              "Width of each slit" },
+            { "d",        "Slit separation",      "m", PT_SCALAR, NULL, "0.08", 0,
+              "Distance between the two slits, centre to centre" },
+            { "w",        "Wall thickness",       "m", PT_SCALAR, NULL, "0.02", 0,
+              "Thickness of the wall the slits are cut in" },
+            { "H",        "Channel height",       "m", PT_SCALAR, NULL, "0.8",  0,
+              "Height of the channel, which is also the height of the screen" },
+            { "Ls",       "Wall to screen",       "m", PT_SCALAR, NULL, "0.45", 0,
+              "How far behind the wall the screen sits" },
+            { "res",      "Grid cells across",    "",  PT_SCALAR, NULL, "4",    0,
+              "Grid cells across one slit.  Doubling it is far more "
+              "accurate and about 8 times slower" },
+        },
+        9,
+        {
+            { "slit_best",   "Best two-slit match (0 to 1)",   "", 0, ""  },
+            { "slit_bestRe", "Reynolds number of best match",  "", 0, ""  },
+            { "slit_re",     "Reynolds numbers tried",         "", 1, "x" },
+            { "slit_match2", "Two-slit match",                 "", 1, "y" },
+            { "slit_match1", "One-slit match",                 "", 1, ""  },
+            { "slit_lambda", "Fitted wavelength",              "m", 1, "" },
+        },
+        6,
+        1, PLOT_SLITTEST, "Two Slits Against One"
+    },
+
     /* ── Manning's Equation ────────────────────────────────── */
     {
         "manning",
@@ -186,7 +231,7 @@ const ModuleDesc modules[] =
     {
         "darcy",
         "Darcy-Weisbach",
-        "Fluid Mechanics",
+        "Fluids",
         "Pipe head loss and pressure drop using Darcy-Weisbach",
         {
             { "f",     "Friction factor", "",    PT_SCALAR, NULL, NULL, 1,
@@ -213,7 +258,7 @@ const ModuleDesc modules[] =
     {
         "bernoulli",
         "Bernoulli's Equation",
-        "Fluid Mechanics",
+        "Fluids",
         "Solve for any one Bernoulli variable given the others",
         {
             { "P1",    "Pressure 1",  "Pa",   PT_SCALAR, NULL, "0",    0,
@@ -358,7 +403,7 @@ const ModuleDesc modules[] =
     {
         "idealgas",
         "Ideal Gas Law",
-        "Thermodynamics",
+        "Thermo",
         "Solve for any ideal gas variable  PV = nRT",
         {
             { "P",     "Pressure",    "Pa",  PT_SCALAR, NULL, "0", 0,
@@ -390,7 +435,7 @@ const ModuleDesc modules[] =
 {
     "heatcond",
     "Heat Conduction",
-    "Thermodynamics",
+    "Thermo",
     "Fourier's Law: steady-state conduction through a slab  Q = kA(T1-T2)/L",
     {
         { "k",     "Conductivity",      "W/m·K", PT_SCALAR, NULL,         NULL, 1,
@@ -426,7 +471,7 @@ const ModuleDesc modules[] =
     {
         "specheat",
         "Specific Heat",
-        "Thermodynamics",
+        "Thermo",
         "Q = m·c·ΔT — solve for any variable",
         {
             { "m",     "Mass",         "kg",     PT_SCALAR, NULL, "0", 0,
@@ -509,7 +554,7 @@ const ModuleDesc modules[] =
     {
         "asteroid",
         "Asteroid Impact Screening",
-        "Astrodynamics",
+        "Astro",
         "Will this asteroid hit Earth? Closest-approach search and impact "
         "probability from JPL orbital elements and their uncertainties",
         {
@@ -564,11 +609,58 @@ const ModuleDesc modules[] =
         1, PLOT_ASTEROID, "Asteroid — Distance from Earth"
     },
 
+    /* ── Schrödinger Equation ──────────────────────────────── */
+    {
+        "schrodinger",
+        "Schrödinger Equation (1D)",
+        "Quantum",
+        "Energy levels and wavefunctions of a particle trapped in any 1D "
+        "potential.  Pick a preset, or type your own formula in $x",
+        {
+            { "V",     "Potential",        "",    PT_STRING, NULL, "harmonic", 1,
+              "A preset — well, harmonic, finite, barrier, double — or a "
+              "formula in $x, such as 0.5*$x^2 + 0.1*$x^4" },
+            { "xmin",  "Box left wall",    "",    PT_SCALAR, NULL, "-5",   0,
+              "Where the box starts; the particle can never go past it "
+              "(nm when units = ev)" },
+            { "xmax",  "Box right wall",   "",    PT_SCALAR, NULL, "5",    0,
+              "Where the box ends (nm when units = ev)" },
+            { "n",     "States",           "",    PT_SCALAR, NULL, "5",    0,
+              "How many energy levels to find, lowest first (up to 50)" },
+            { "N",     "Grid points",      "",    PT_SCALAR, NULL, "1000", 0,
+              "More is more accurate and a little slower (up to 5000)" },
+            { "m",     "Mass",             "",    PT_SCALAR, NULL, "1",    0,
+              "Particle mass; in electron masses when units = ev" },
+            { "units", "Units",            "",    PT_CHOICE, sch_units_choices, "au", 0,
+              "au: hbar = 1 and mass 1.  ev: positions in nanometres, "
+              "energies in electron-volts, mass in electron masses" },
+            { "V0",    "Depth / height",   "",    PT_SCALAR, NULL, NULL,   0,
+              "For the finite, barrier and double presets (default 10)" },
+            { "a",     "Width",            "",    PT_SCALAR, NULL, NULL,   0,
+              "Well or barrier width; for double, where the two dips sit" },
+            { "k",     "Spring constant",  "",    PT_SCALAR, NULL, NULL,   0,
+              "Stiffness of the harmonic preset (default 1)" },
+        },
+        10,
+        {
+            { "schrod_E0",     "Ground-state energy",         "", 0, ""  },
+            { "schrod_n",      "States found",                "", 0, ""  },
+            { "schrod_nbound", "States the potential holds (-1 = box only)", "", 0, "" },
+            { "schrod_err",    "Worst difference from exact (-1 = none)",    "", 0, "" },
+            { "schrod_x",      "Position",                    "", 1, "x" },
+            { "schrod_V",      "Potential",                   "", 1, ""  },
+            { "schrod_E",      "Energy levels",               "", 1, ""  },
+            { "schrod_psi",    "Wavefunctions",               "", 1, "y" },
+        },
+        8,
+        1, PLOT_SCHRODINGER, "Schrödinger Equation — Energy Levels"
+    },
+
     /* ── Load CSV ──────────────────────────────────────────── */
     {
         "load",
         "Load CSV",
-        "Signal Processing",
+        "Signaling",
         "Load a column from a CSV file into a matrix variable",
         {
             { "file", "CSV filename",  "",  PT_STRING, NULL, NULL,     1,
@@ -590,7 +682,7 @@ const ModuleDesc modules[] =
     {
         "fft",
         "FFT",
-        "Signal Processing",
+        "Signaling",
         "Cooley-Tukey radix-2 FFT of a column-vector variable",
         {
             { "var",    "Source variable", "", PT_STRING, NULL, "signal", 1,
@@ -613,7 +705,7 @@ const ModuleDesc modules[] =
     {
         "ifft",
         "Inverse FFT",
-        "Signal Processing",
+        "Signaling",
         "Inverse FFT from real and imaginary column-vector variables",
         {
             { "re_var", "Real variable", "", PT_STRING, NULL, "fft_re", 1,
@@ -713,6 +805,9 @@ int md_in_category(const char *category,
  *                  mode-specific parameters so that sim-only
  *                  params are omitted in step mode, and
  *                  tune-only params are omitted in sim/step mode.
+ *                - "schrodinger" and "slittest" separate key=val
+ *                  pairs with commas: schrodinger because its V
+ *                  formula may hold spaces, slittest to match it.
  *              All other commands use standard key=value pairs.
  *************************************************************/
 int md_build_command(const ModuleDesc  *desc,
@@ -811,6 +906,24 @@ int md_build_command(const ModuleDesc  *desc,
                          desc->params[i].key, values[i]);
             if (n < 0 || (size_t)n >= buflen - pos) return 0;
             pos += n;
+        }
+    }
+    /* ── special: schrodinger / slittest key=val, key=val, ... ──
+          Commas, not spaces: parse reads the potential formula up to
+          the next top-level comma, so "0.5*$x^2 + 1" arrives whole.
+          slittest takes the same punctuation, for consistency. ── */
+    else if (strcmp(desc->command, "schrodinger") == 0 ||
+             strcmp(desc->command, "slittest")    == 0)
+    {
+        const char *sep = " ";   /* first pair follows the command name */
+        for (i = 0; i < desc->n_params; i++)
+        {
+            if (!values[i] || values[i][0] == '\0') continue;
+            n = snprintf(buf + pos, buflen - pos, "%s%s=%s",
+                         sep, desc->params[i].key, values[i]);
+            if (n < 0 || (size_t)n >= buflen - pos) return 0;
+            pos += n;
+            sep = ", ";
         }
     }
     /* ── standard: command key=val key=val ... ── */

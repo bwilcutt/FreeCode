@@ -89,7 +89,9 @@ typedef enum
     PLOT_MANNING,
     PLOT_ASTEROID,
     PLOT_NAVIER,
-    PLOT_CHANNEL
+    PLOT_CHANNEL,
+    PLOT_SCHRODINGER,
+    PLOT_SLITTEST
 } PlotType;
 
 /* ═══════════════════════════════════════════════════════════
@@ -167,7 +169,7 @@ typedef struct
  *   label      — display name in menus and form title
  *                (e.g. "Manning's Equation")
  *   category   — menu category (e.g. "Hydraulics",
- *                "Fluid Mechanics", "Signal Processing")
+ *                "Fluids", "Signaling")
  *   description— one-line description shown in the form header
  *   params     — array of input parameter descriptors
  *   n_params   — number of entries in params[]

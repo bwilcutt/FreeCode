@@ -46,4 +46,12 @@ extern Matrix *mat_mul(const Matrix *a, const Matrix *b);
 extern Matrix *mat_scale(const Matrix *a, double s);
 extern Matrix *mat_transpose(const Matrix *a);
 extern Matrix *mat_add(const Matrix *a, const Matrix *b);
+
+/* Eigen decomposition (symmetric / symmetric tridiagonal).
+   Both return 0 on success, -1 on error. outValues is an n x 1 column of
+   eigenvalues in ascending order; outVectors (pass NULL to skip) is n x n
+   with column k holding the unit eigenvector for eigenvalue k. */
+extern int mat_eig_sym(const Matrix *a, Matrix **outValues, Matrix **outVectors);
+extern int mat_eig_tridiag(const double *diag, const double *offDiag, int n,
+                           Matrix **outValues, Matrix **outVectors);
 #endif

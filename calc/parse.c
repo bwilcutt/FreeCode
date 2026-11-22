@@ -18,6 +18,8 @@
 #include "asteroid.h"
 #include "navier.h"
 #include "channel.h"
+#include "slittest.h"
+#include "schrodinger.h"
 #include "dump.h"
 #include "mathfuncs.h"
 
@@ -573,6 +575,44 @@ Matrix *parse_mat_primary()
             return vf_ones(oN);
         }
 
+        /* ── eigen decomposition (real symmetric matrices) ──
+           eig($A)    -> column of eigenvalues, smallest first
+           eigvec($A) -> matrix whose column k is the eigenvector for
+                         eigenvalue k of eig($A)
+           Two functions rather than one, because a matrix expression
+           returns exactly one matrix and C has no multiple return values
+           (MATLAB users will have to cope). */
+        if (strcmp(funcName, "eig") == 0 || strcmp(funcName, "eigvec") == 0)
+        {
+            Matrix *eigValues   = NULL;
+            Matrix *eigVectors  = NULL;
+            int     wantVectors = (strcmp(funcName, "eigvec") == 0);
+
+            /* Read the argument and the closing paren. */
+            argMatrix = parse_mat_expr();
+            while (isspace(*expr)) expr++;
+            if (*expr == ')') expr++;
+            if (!argMatrix) return NULL;
+
+            /* Only compute eigenvectors when they were asked for — they are
+               the expensive part. mat_eig_sym prints its own error. */
+            if (mat_eig_sym(argMatrix, &eigValues,
+                            wantVectors ? &eigVectors : NULL) != 0)
+            {
+                mat_free(argMatrix);
+                return NULL;
+            }
+            mat_free(argMatrix);
+
+            /* Hand back the one the caller wanted; discard the other. */
+            if (wantVectors)
+            {
+                mat_free(eigValues);
+                return eigVectors;
+            }
+            return eigValues;
+        }
+
         printf("Unknown matrix function: %s\n", funcName);
         while (*expr && *expr != ')') expr++;
         if (*expr == ')') expr++;
@@ -699,6 +739,8 @@ int is_matrix_context(const char *s)
             if (strcmp(keyword, "linspace")  == 0) return 1;
             if (strcmp(keyword, "zeros")     == 0) return 1;
             if (strcmp(keyword, "ones")      == 0) return 1;
+            if (strcmp(keyword, "eig")       == 0) return 1;
+            if (strcmp(keyword, "eigvec")    == 0) return 1;
             continue;
         }
         s++;
@@ -919,6 +961,8 @@ void print_help()
         "    inv($A)              inverse  (square only)\n"
         "    scale($A, k)         multiply every element by k\n"
         "    det($A)              determinant  (printed as scalar)\n"
+        "    eig($A)              eigenvalues, smallest first  (symmetric only)\n"
+        "    eigvec($A)           eigenvectors, column k goes with eig row k\n"
         "\n"
         "  ── Hydraulics ────────────────────────────────────────\n"
         "  Manning's Equation\n"
@@ -951,6 +995,14 @@ void print_help()
         "    -> stores $channel_cd, $channel_cl, $channel_dp, $channel_st\n"
         "    -> history $channel_tv/$channel_cdv/$channel_clv\n"
         "    -> fields $channel_ufield, $channel_vfield, $channel_pfield, $channel_wfield\n"
+        "\n"
+        "  Two slits against one  (fluid particles vs wave optics; commas between settings)\n"
+        "    slittest [Re_min=<>], [Re_max=<>], [Re_steps=<>],\n"
+        "             [a=<>], [d=<>], [w=<>], [H=<>], [Ls=<>], [res=<>]\n"
+        "    slittest ?           full usage\n"
+        "    -> stores $slit_best, $slit_bestRe\n"
+        "    -> per Re $slit_re, $slit_match2, $slit_match1, $slit_lambda\n"
+        "    -> patterns $slit_ns2, $slit_ns1, $slit_wave2, $slit_wave1, $slit_y\n"
         "\n"
         "  Bernoulli's Equation\n"
         "    bernoulli P1=<> V1=<> z1=<> P2=<> V2=<> z2=<> [rho=<>] solve=<P1|V1|z1|P2|V2|z2>\n"
@@ -1008,6 +1060,16 @@ void print_help()
         "             cc=Cohen-Coon\n"
         "\n"
         "    pid reset            zero $pid_integral and $pid_prev_err\n"
+        "\n"
+        "  ── Quantum Mechanics ─────────────────────────────────\n"
+        "  Schrodinger Equation  (1D bound states; settings separated by commas)\n"
+        "    schrodinger V=<preset|formula in $x>, [xmin=<>], [xmax=<>], [n=<>]\n"
+        "                [N=<grid>], [m=<>], [units=au|ev], [V0=<>], [a=<>], [k=<>]\n"
+        "    presets: well harmonic finite barrier double\n"
+        "    schrodinger ?        full usage\n"
+        "    -> stores $schrod_E0, $schrod_n, $schrod_nbound, $schrod_err\n"
+        "    -> $schrod_E (energies), $schrod_x/$schrod_V (grid, potential)\n"
+        "    -> $schrod_psi, $schrod_prob (wavefunctions, psi^2)\n"
         "\n"
         "  ── Astrodynamics ─────────────────────────────────────\n"
         "  Asteroid Impact Screening  (two-body, Earth + Moon offset)\n"
@@ -1167,6 +1229,7 @@ int main()
         if (strncmp(inputLine, "darcy",       5)  == 0)    { run_darcy(inputLine + 5);     continue; }
         if (strncmp(inputLine, "navier",      6)  == 0)    { run_navier(inputLine + 6);    continue; }
         if (strncmp(inputLine, "channel",     7)  == 0)    { run_channel(inputLine + 7);   continue; }
+        if (strncmp(inputLine, "slittest",    8)  == 0)    { run_slittest(inputLine + 8);  continue; }
  
         /* ── Structural mechanics ── */
         if (strncmp(inputLine, "stress",      6)  == 0)    { run_stress(inputLine + 6);    continue; }
@@ -1180,6 +1243,9 @@ int main()
 
         /* ── Control systems ── */
         if (strncmp(inputLine, "pid",         3)  == 0)    { run_pid(inputLine + 3);       continue; }
+
+        /* ── Quantum mechanics ── */
+        if (strncmp(inputLine, "schrodinger", 11) == 0)    { run_schrodinger(inputLine + 11); continue; }
 
         /* ── Astrodynamics ── */
         if (strncmp(inputLine, "asteroid",    8)  == 0)    { run_asteroid(inputLine + 8);  continue; }

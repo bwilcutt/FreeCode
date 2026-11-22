@@ -29,6 +29,8 @@
                 "Algo/navier.c",
                 "Algo/ns_core.c",
                 "Algo/channel.c",
+                "Algo/schrodinger.c",
+                "Algo/slittest.c",
                 "-I", ".",
                 "-I", "Algo",
                 "-I", "PipeMgr",

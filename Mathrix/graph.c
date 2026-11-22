@@ -16,6 +16,7 @@
 #include "asteroid_graph.h"
 #include "navier_graph.h"
 #include "channel_graph.h"
+#include "slittest_graph.h"
 #include <gtk/gtk.h>
 #include <cairo.h>
 #include <math.h>
@@ -234,7 +235,8 @@ void graph_window_open_vars(const char   *title,
     window = gtk_window_new();
     gtk_window_set_title(GTK_WINDOW(window), gd->title);
     gtk_window_set_default_size(GTK_WINDOW(window),
-                                plot_type == PLOT_CHANNEL
+                                plot_type == PLOT_CHANNEL ||
+                                plot_type == PLOT_SLITTEST
                                 ? GRAPH_MIN_W + 500
                                 : plot_type == PLOT_NAVIER
                                 ? GRAPH_MIN_W + 400
@@ -243,7 +245,8 @@ void graph_window_open_vars(const char   *title,
                                 : plot_type == PLOT_BERNOULLI
                                 ? GRAPH_MIN_W + 200
                                 : GRAPH_MIN_W + 100,
-                                plot_type == PLOT_CHANNEL
+                                plot_type == PLOT_CHANNEL ||
+                                plot_type == PLOT_SLITTEST
                                 ? GRAPH_MIN_H + 300
                                 : plot_type == PLOT_NAVIER
                                 ? GRAPH_MIN_H + 140
@@ -615,6 +618,8 @@ static void on_draw(GtkDrawingArea *da, cairo_t *cr,
         draw_navier_plot(cr, w, h, gd);
     else if (gd->plot_type == PLOT_CHANNEL)
         draw_channel_plot(cr, w, h, gd);                         
+    else if (gd->plot_type == PLOT_SLITTEST)
+        draw_slittest_plot(cr, w, h, gd);
     else
         draw_line_plot(cr, w, h, gd);
 }
@@ -1318,7 +1323,7 @@ static void draw_report_column(cairo_t *cr, double x, double y,
 
 /* ═══════════════════════════════════════════════════════════
    SHARED PANEL HELPERS — used by the module graphs
-   (navier_graph.c, channel_graph.c); see graph.h
+   (navier_graph.c, channel_graph.c, slittest_graph.c); see graph.h
    ═══════════════════════════════════════════════════════════ */
 
 void graph_data_range(const double *a, int na, const double *b, int nb,

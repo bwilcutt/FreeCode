@@ -6,20 +6,31 @@
  *               the DFG "flow around a cylinder" benchmark (Schäfer &
  *               Turek, 1996) and anything else of that shape.
  *
+ *               The file is in two halves:
+ *                 Solver core (ch_*)  — the channel itself and the time
+ *                   marching.  It neither knows nor cares what is in the
+ *                   way: the obstacle arrives as a mask of solid cells
+ *                   from the caller's body() hook.  slittest.c uses it
+ *                   for a wall with slits in it.
+ *                 Cylinder front end (run_channel) — the "channel"
+ *                   command: builds the circle, measures drag, lift,
+ *                   shedding and pressure drop on it, and compares
+ *                   against DFG.
+ *
  *               Method (velocity / pressure, projection method)
  *                 Staggered "MAC" grid of square cells, h = D / res:
  *                   u on the right face of each cell, v on the top face,
  *                   p at the cell centre.  A ring of ghost cells carries
- *                   the boundary conditions.  The cylinder is the set of
- *                   cells whose centres fall inside the circle (a
- *                   "staircase" body).
+ *                   the boundary conditions.  The obstacle is the set of
+ *                   cells marked solid (for the cylinder, those whose
+ *                   centres fall inside the circle — a "staircase" body).
  *                 Each time step:
  *                   1. Tentative velocities F, G from the momentum
  *                      equation without pressure — central differences
  *                      blended with upwinding by the factor gamma, the
  *                      scheme of Griebel, Dornseifer & Neunhoeffer.
  *                   2. Pressure from  lap(p) = div(F, G) / dt, solved by
- *                      ns_sor_poisson() — the same solver navier.c uses —
+ *                      ns_poisson() — the same solver navier.c uses —
  *                      with zero-gradient walls and p = 0 at the outlet.
  *                   3. u = F - dt dp/dx, v = G - dt dp/dy: the pressure
  *                      kick that makes the flow incompressible again.
@@ -30,7 +41,7 @@
  *
  *               Boundaries: parabolic inflow on the left, zero-gradient
  *               outflow on the right, no-slip walls top and bottom and
- *               on the cylinder.
+ *               on every solid cell.
  *
  *               Benchmarks (all defaults are the DFG set-up):
  *                 2D-1, Re = 20, steady:   cD 5.5795, cL 0.0106,
@@ -52,7 +63,6 @@
  * ============================================================================= */
 
 #include "channel.h"
-#include "matrix.h"
 #include "ns_core.h"
 
 /* ═══════════════════════════════════════════════════════════
@@ -86,8 +96,8 @@
 #define CH_GAMMA_SAFETY   0.3       /* upwind blend: 0 = pure central (wiggles
                                        at Re 100), 1.2 = textbook-safe (drag
                                        3-8% high).  0.3 matched DFG best        */
-#define CH_SOR_MAX        400       /* pressure sweeps allowed per step          */
-#define CH_SOR_TOL_REL    1e-6      /* pressure tolerance, x Umean^2             */
+#define CH_POISSON_MAX    400       /* pressure-solver iterations per step       */
+#define CH_POISSON_TOL_REL 1e-6     /* pressure tolerance, x Umean^2             */
 #define CH_REPORT_EVERY   1000      /* progress line spacing, in steps           */
 #define CH_HIST_MAX       2000      /* drag/lift history points kept             */
 
@@ -102,51 +112,19 @@
 /* index into the (nx+2) x (ny+2) arrays, ghost ring included */
 #define IX(i, j)  ((j) * stride + (i))
 
-/*************************************************************
- * Struct:      ChGrid
- * Description: Everything one run needs, so the helpers take one
- *              pointer instead of fourteen arguments.
- *
- *   nx, ny     fluid-domain cells; arrays are (nx+2) x (ny+2)
- *   h          cell size, m
- *   solid      1 = cylinder cell (ghost ring is 0, handled by BCs)
- *   u, v       face velocities (u on right faces, v on top faces)
- *   F, G       tentative velocities
- *   p          kinematic pressure (p / rho), a Matrix for ns_core
- *   rhs        pressure source, a Matrix for ns_core
- *   ptype      NS_CELL_* for every pressure cell
- *   uin        inlet speed for each row (index j)
- *   nu, Umean, D, rho   physics
- *************************************************************/
-typedef struct
-{
-    int            nx;
-    int            ny;
-    double         h;
-    unsigned char *solid;
-    double        *u;
-    double        *v;
-    double        *F;
-    double        *G;
-    Matrix        *p;
-    Matrix        *rhs;
-    unsigned char *ptype;
-    double        *uin;
-    double         nu;
-    double         Umean;
-    double         D;
-    double         rho;
-} ChGrid;
+/* ═══════════════════════════════════════════════════════════
+   SOLVER CORE — body-agnostic channel flow
+   ═══════════════════════════════════════════════════════════ */
 
 /*************************************************************
- * Function:    is_fluid
+ * Function:    ch_is_fluid
  * Input:       g    (const ChGrid*) — the grid
  *              i, j (int)           — cell indices, ghosts allowed
  * Output:      int — 1 for a fluid cell inside the channel, else 0
  * Description: Ghost cells count as not-fluid: they are boundary
  *              conditions, not flow.
  **************************************************************/
-static int is_fluid(const ChGrid *g, int i, int j)
+int ch_is_fluid(const ChGrid *g, int i, int j)
 {
     int stride = g->nx + 2;
 
@@ -163,7 +141,7 @@ static int is_fluid(const ChGrid *g, int i, int j)
  *                inlet   — parabolic u, zero v (ghost reflection)
  *                outlet  — zero gradient
  *                walls   — no slip (v = 0 on, u reflected through)
- *                cylinder — zero on faces touching fluid, reflected
+ *                obstacle — zero on faces touching fluid, reflected
  *                          on faces buried inside it, so the wall
  *                          speed lands at zero halfway between
  **************************************************************/
@@ -195,40 +173,40 @@ static void apply_boundaries(ChGrid *g)
         g->u[IX(i, ny + 1)] = -g->u[IX(i, ny)];
     }
 
-    /* ── cylinder: u faces ── */
+    /* ── obstacle: u faces ── */
     for (j = 1; j <= ny; j++)
     {
         for (i = 1; i < nx; i++)
         {
-            fl = is_fluid(g, i, j);
-            fr = is_fluid(g, i + 1, j);
+            fl = ch_is_fluid(g, i, j);
+            fr = ch_is_fluid(g, i + 1, j);
             if (fl && fr) continue;                          /* a real unknown */
 
             if (fl || fr)
                 g->u[IX(i, j)] = 0.0;                        /* face on the wall */
-            else if (is_fluid(g, i, j + 1) && is_fluid(g, i + 1, j + 1))
+            else if (ch_is_fluid(g, i, j + 1) && ch_is_fluid(g, i + 1, j + 1))
                 g->u[IX(i, j)] = -g->u[IX(i, j + 1)];        /* fluid above      */
-            else if (is_fluid(g, i, j - 1) && is_fluid(g, i + 1, j - 1))
+            else if (ch_is_fluid(g, i, j - 1) && ch_is_fluid(g, i + 1, j - 1))
                 g->u[IX(i, j)] = -g->u[IX(i, j - 1)];        /* fluid below      */
             else
                 g->u[IX(i, j)] = 0.0;                        /* deep inside      */
         }
     }
 
-    /* ── cylinder: v faces ── */
+    /* ── obstacle: v faces ── */
     for (j = 1; j < ny; j++)
     {
         for (i = 1; i <= nx; i++)
         {
-            fl = is_fluid(g, i, j);
-            fr = is_fluid(g, i, j + 1);
+            fl = ch_is_fluid(g, i, j);
+            fr = ch_is_fluid(g, i, j + 1);
             if (fl && fr) continue;
 
             if (fl || fr)
                 g->v[IX(i, j)] = 0.0;
-            else if (is_fluid(g, i + 1, j) && is_fluid(g, i + 1, j + 1))
+            else if (ch_is_fluid(g, i + 1, j) && ch_is_fluid(g, i + 1, j + 1))
                 g->v[IX(i, j)] = -g->v[IX(i + 1, j)];        /* fluid to the right */
-            else if (is_fluid(g, i - 1, j) && is_fluid(g, i - 1, j + 1))
+            else if (ch_is_fluid(g, i - 1, j) && ch_is_fluid(g, i - 1, j + 1))
                 g->v[IX(i, j)] = -g->v[IX(i - 1, j)];        /* fluid to the left  */
             else
                 g->v[IX(i, j)] = 0.0;
@@ -271,7 +249,7 @@ static void compute_FG(ChGrid *g, double dt, double gamma)
     {
         for (i = 1; i < nx; i++)
         {
-            if (!is_fluid(g, i, j) || !is_fluid(g, i + 1, j)) continue;
+            if (!ch_is_fluid(g, i, j) || !ch_is_fluid(g, i + 1, j)) continue;
 
             /* d(u^2)/dx: averages to the cell centres either side */
             a = 0.5 * (u[IX(i, j)]     + u[IX(i + 1, j)]);
@@ -300,7 +278,7 @@ static void compute_FG(ChGrid *g, double dt, double gamma)
     {
         for (i = 1; i <= nx; i++)
         {
-            if (!is_fluid(g, i, j) || !is_fluid(g, i, j + 1)) continue;
+            if (!ch_is_fluid(g, i, j) || !ch_is_fluid(g, i, j + 1)) continue;
 
             /* d(uv)/dx: u carried to the face corners right and left */
             a = 0.5 * (u[IX(i, j)]     + u[IX(i, j + 1)]);
@@ -329,14 +307,13 @@ static void compute_FG(ChGrid *g, double dt, double gamma)
  * Function:    project
  * Input:       g          (ChGrid*) — grid; p, u, v updated
  *              dt         (double)  — time step
- *              omega      (double)  — SOR factor
- *              tol        (double)  — SOR tolerance
+ *              tol        (double)  — pressure-solver tolerance
  * Output:      double — largest velocity change this step, m/s
  * Description: Pressure solve and the correction that removes the
  *              divergence F and G picked up.  Returns how much the
  *              velocity field moved, for the "settled" test.
  **************************************************************/
-static double project(ChGrid *g, double dt, double omega, double tol)
+static double project(ChGrid *g, double dt, double tol)
 {
     int     stride = g->nx + 2;
     int     nx     = g->nx;
@@ -350,19 +327,19 @@ static double project(ChGrid *g, double dt, double omega, double tol)
     /* ── source: lap(p) = div(F,G) / dt, written as -src for ns_core ── */
     for (j = 1; j <= ny; j++)
         for (i = 1; i <= nx; i++)
-            MAT(g->rhs, j, i) = is_fluid(g, i, j)
+            MAT(g->rhs, j, i) = ch_is_fluid(g, i, j)
                 ? -((g->F[IX(i, j)] - g->F[IX(i - 1, j)]) +
                     (g->G[IX(i, j)] - g->G[IX(i, j - 1)])) / (h * dt)
                 : 0.0;
 
-    ns_sor_poisson(g->p, g->rhs, g->ptype, h, omega, CH_SOR_MAX, tol);
+    ns_poisson(g->p, g->rhs, g->ptype, h, CH_POISSON_MAX, tol);
 
     /* ── pressure kick on every unknown face ── */
     for (j = 1; j <= ny; j++)
     {
         for (i = 1; i < nx; i++)
         {
-            if (!is_fluid(g, i, j) || !is_fluid(g, i + 1, j)) continue;
+            if (!ch_is_fluid(g, i, j) || !ch_is_fluid(g, i + 1, j)) continue;
             unew = g->F[IX(i, j)] -
                    dt / h * (MAT(g->p, j, i + 1) - MAT(g->p, j, i));
             if (fabs(unew - g->u[IX(i, j)]) > change)
@@ -374,7 +351,7 @@ static double project(ChGrid *g, double dt, double omega, double tol)
     {
         for (i = 1; i <= nx; i++)
         {
-            if (!is_fluid(g, i, j) || !is_fluid(g, i, j + 1)) continue;
+            if (!ch_is_fluid(g, i, j) || !ch_is_fluid(g, i, j + 1)) continue;
             unew = g->G[IX(i, j)] -
                    dt / h * (MAT(g->p, j + 1, i) - MAT(g->p, j, i));
             if (fabs(unew - g->v[IX(i, j)]) > change)
@@ -385,6 +362,233 @@ static double project(ChGrid *g, double dt, double omega, double tol)
 
     return change;
 }
+
+/*************************************************************
+ * Function:    ch_grid_dims
+ * Input:       s       (const ChSetup*) — the set-up
+ *              nx, ny  (int*)           — receive the cell counts
+ *              h       (double*)        — receives the cell size, m
+ * Output:      void
+ * Description: Grid the solver would build for this set-up, so a
+ *              caller can check sizes and fit before allocating.
+ **************************************************************/
+void ch_grid_dims(const ChSetup *s, int *nx, int *ny, double *h)
+{
+    *h  = s->D / s->res;
+    *nx = (int)(s->L / *h + 0.5);
+    *ny = (int)(s->H / *h + 0.5);
+}
+
+/*************************************************************
+ * Function:    ch_grid_init
+ * Input:       g      (ChGrid*)         — filled in
+ *              s      (const ChSetup*)  — the set-up
+ *              hooks  (const ChHooks*)  — body() marks the solid cells
+ * Output:      int — 0 = ready, -1 = too many cells (nothing allocated)
+ * Description: Allocates the grid, lets body() mark the obstacle,
+ *              sets the pressure cell types and the parabolic inlet,
+ *              and starts the whole channel already flowing with it.
+ **************************************************************/
+int ch_grid_init(ChGrid *g, const ChSetup *s, const ChHooks *hooks)
+{
+    int    stride;
+    int    nx, ny;
+    int    i, j;
+    double h, y;
+
+    ch_grid_dims(s, &nx, &ny, &h);
+    if ((double)nx * ny > CH_CELLS_MAX) return -1;
+
+    /* ── allocate ── */
+    stride   = nx + 2;
+    g->nx    = nx;
+    g->ny    = ny;
+    g->h     = h;
+    g->nu    = s->nu;
+    g->D     = s->D;
+    g->rho   = s->rho;
+    g->Umean = 2.0 * s->U / 3.0;
+    g->solid = calloc((size_t)stride * (ny + 2), 1);
+    g->ptype = calloc((size_t)stride * (ny + 2), 1);
+    g->u     = calloc((size_t)stride * (ny + 2), sizeof(double));
+    g->v     = calloc((size_t)stride * (ny + 2), sizeof(double));
+    g->F     = calloc((size_t)stride * (ny + 2), sizeof(double));
+    g->G     = calloc((size_t)stride * (ny + 2), sizeof(double));
+    g->uin   = calloc((size_t)ny + 2, sizeof(double));
+    g->p     = mat_new(ny + 2, stride);
+    g->rhs   = mat_new(ny + 2, stride);
+
+    /* ── the caller says what's in the way ── */
+    hooks->body(g, hooks->ctx);
+
+    /* ── pressure cell types: fluid solved, obstacle and closed
+          boundaries are walls, the outlet ghost column holds p = 0 ── */
+    for (j = 0; j <= ny + 1; j++)
+    {
+        for (i = 0; i <= nx + 1; i++)
+        {
+            if (i == nx + 1 && j >= 1 && j <= ny)
+                g->ptype[IX(i, j)] = NS_CELL_FIXED;
+            else if (ch_is_fluid(g, i, j))
+                g->ptype[IX(i, j)] = NS_CELL_FLUID;
+            else
+                g->ptype[IX(i, j)] = NS_CELL_SOLID;
+        }
+    }
+
+    /* ── parabolic inlet, and the whole channel starts already flowing
+          with it — reaches steady state far sooner than from rest ── */
+    for (j = 1; j <= ny; j++)
+    {
+        y         = (j - 0.5) * h;
+        g->uin[j] = 4.0 * s->U * y * (s->H - y) / (s->H * s->H);
+        for (i = 0; i <= nx; i++)
+            g->u[IX(i, j)] = g->uin[j];
+    }
+    apply_boundaries(g);
+
+    return 0;
+}
+
+/*************************************************************
+ * Function:    ch_solve
+ * Input:       g      (ChGrid*)         — from ch_grid_init(), updated
+ *              s      (const ChSetup*)  — same set-up as the init
+ *              hooks  (const ChHooks*)  — step()/report() may be NULL
+ *              info   (ChRunInfo*)      — receives how it ended
+ * Output:      int — 0 = ran, 1 = became unstable (see info->t)
+ * Description: Marches the projection method in time until the flow
+ *              settles below s->tol, the time runs out, or it blows up.
+ **************************************************************/
+int ch_solve(ChGrid *g, const ChSetup *s, const ChHooks *hooks, ChRunInfo *info)
+{
+    int    stride = g->nx + 2;
+    int    ny     = g->ny;
+    double h      = g->h;
+    double nu     = g->nu;
+    double U      = s->U;
+    double dt, gamma, umax, vmax;
+    double poissonTol;
+    double t      = 0.0;
+    int    step   = 0;
+    double change;
+    double accel;
+    double gsafe  = (s->gamma_safety > 0.0) ? s->gamma_safety : CH_GAMMA_SAFETY;
+    double uref;
+    int    k;
+
+    info->t        = 0.0;
+    info->steps    = 0;
+    info->steady   = 0;
+    info->unstable = 0;
+
+    /* pressure tolerance, scaled on the flow's own speed */
+    uref       = (s->Uref > 0.0) ? s->Uref : g->Umean;
+    poissonTol = CH_POISSON_TOL_REL * uref * uref;
+
+    /* ── march in time ── */
+    while (t < s->t_end)
+    {
+        /* largest speeds on the grid, for the stability limits */
+        umax = U;
+        vmax = 0.0;
+        for (k = 0; k < stride * (ny + 2); k++)
+        {
+            if (fabs(g->u[k]) > umax) umax = fabs(g->u[k]);
+            if (fabs(g->v[k]) > vmax) vmax = fabs(g->v[k]);
+        }
+
+        /* time step: diffusion, then convection in x and y */
+        dt = 0.25 * h * h / nu;
+        if (h / umax < dt)                dt = h / umax;
+        if (vmax > 0.0 && h / vmax < dt)  dt = h / vmax;
+        dt *= CH_TAU;
+
+        /* the last step is NOT trimmed to land on t_end exactly: a sliver
+           of a step makes the momentum change per second in the force
+           balance jump, and drag would end on a fake dip */
+
+        /* a pinch of upwinding to keep the wake smooth — more than this
+           and numerical viscosity starts doing the fluid's job for it.
+           A caller running at high Re may ask for more (gamma_safety). */
+        gamma = gsafe * fmax(umax, vmax) * dt / h;
+        if (gamma > 1.0) gamma = 1.0;
+
+        compute_FG(g, dt, gamma);
+        change = project(g, dt, poissonTol);
+        apply_boundaries(g);
+
+        t += dt;
+        step++;
+
+        /* blow-up check: NaN spreads faster than gossip */
+        if (isnan(change) || isinf(change))
+        {
+            info->t        = t;
+            info->steps    = step;
+            info->unstable = 1;
+            return 1;
+        }
+
+        /* the caller's per-step work: forces, tracers, whatever */
+        if (hooks->step) hooks->step(g, t, dt, hooks->ctx);
+
+        /* settled?  acceleration, scaled by D / Umean^2 */
+        accel = change / dt * g->D / (g->Umean * g->Umean);
+        if (accel < s->tol) { info->steady = 1; break; }
+
+        if (hooks->report && step % CH_REPORT_EVERY == 0)
+            hooks->report(g, t, accel, hooks->ctx);
+    }
+
+    info->t     = t;
+    info->steps = step;
+    return 0;
+}
+
+/*************************************************************
+ * Function:    ch_grid_free
+ * Input:       g (ChGrid*) — grid from ch_grid_init()
+ * Output:      void
+ * Description: Releases every array the grid owns.
+ **************************************************************/
+void ch_grid_free(ChGrid *g)
+{
+    free(g->solid); free(g->ptype);
+    free(g->u); free(g->v); free(g->F); free(g->G); free(g->uin);
+    mat_free(g->p); mat_free(g->rhs);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CYLINDER FRONT END — the "channel" command
+   ═══════════════════════════════════════════════════════════ */
+
+/*************************************************************
+ * Struct:      CylCtx
+ * Description: What the cylinder's hooks need between time steps.
+ *
+ *   cx, cy, D     cylinder centre and diameter, m (for body())
+ *   box           force-balance box edges, il ir jb jt (face indices)
+ *   mx_old,my_old box momentum at the previous step, per unit rho
+ *   cd, cl        latest drag and lift coefficients
+ *   hist_*        drag / lift history, grown as needed
+ *************************************************************/
+typedef struct
+{
+    double  cx;
+    double  cy;
+    double  D;
+    int     box[4];
+    double  mx_old;
+    double  my_old;
+    double  cd;
+    double  cl;
+    double *hist_t;
+    double *hist_cd;
+    double *hist_cl;
+    int     hist_n;
+    int     hist_cap;
+} CylCtx;
 
 /*************************************************************
  * Function:    box_momentum
@@ -412,7 +616,7 @@ static void box_momentum(const ChGrid *g, const int *box,
     {
         for (i = box[0] + 1; i <= box[1]; i++)
         {
-            if (!is_fluid(g, i, j)) continue;
+            if (!ch_is_fluid(g, i, j)) continue;
             *mx += 0.5 * (g->u[IX(i - 1, j)] + g->u[IX(i, j)]) * h2;
             *my += 0.5 * (g->v[IX(i, j - 1)] + g->v[IX(i, j)]) * h2;
         }
@@ -587,6 +791,89 @@ static double shedding_strouhal(const double *t, const double *cl, int n,
 }
 
 /*************************************************************
+ * Function:    cyl_body
+ * Input:       g   (ChGrid*) — grid; solid cells marked
+ *              ctx (void*)   — CylCtx with the centre and diameter
+ * Output:      void
+ * Description: Staircase cylinder: every cell whose centre is inside
+ *              the circle.
+ **************************************************************/
+static void cyl_body(ChGrid *g, void *ctx)
+{
+    CylCtx *c      = ctx;
+    int     stride = g->nx + 2;
+    double  x, y, r2;
+    int     i, j;
+
+    for (j = 1; j <= g->ny; j++)
+    {
+        for (i = 1; i <= g->nx; i++)
+        {
+            x  = (i - 0.5) * g->h - c->cx;
+            y  = (j - 0.5) * g->h - c->cy;
+            r2 = x * x + y * y;
+            g->solid[IX(i, j)] = (r2 < 0.25 * c->D * c->D);
+        }
+    }
+}
+
+/*************************************************************
+ * Function:    cyl_step
+ * Input:       g   (ChGrid*) — grid after a good time step
+ *              t   (double)  — time reached, s
+ *              dt  (double)  — the step just taken, s
+ *              ctx (void*)   — CylCtx; forces and history updated
+ * Output:      void
+ * Description: Drag and lift this step from the box balance, into
+ *              the history.
+ **************************************************************/
+static void cyl_step(ChGrid *g, double t, double dt, void *ctx)
+{
+    CylCtx *c = ctx;
+    double  mx, my, fx, fy;
+
+    box_momentum(g, c->box, &mx, &my);
+    cylinder_forces(g, c->box, (mx - c->mx_old) / dt, (my - c->my_old) / dt,
+                    &fx, &fy);
+    c->mx_old = mx;
+    c->my_old = my;
+    c->cd = 2.0 * fx / (g->rho * g->Umean * g->Umean * g->D);
+    c->cl = 2.0 * fy / (g->rho * g->Umean * g->Umean * g->D);
+
+    /* grow the history by doubling — realloc's favourite exercise */
+    if (c->hist_n == c->hist_cap)
+    {
+        c->hist_cap = c->hist_cap ? c->hist_cap * 2 : 4096;
+        c->hist_t   = realloc(c->hist_t,  c->hist_cap * sizeof(double));
+        c->hist_cd  = realloc(c->hist_cd, c->hist_cap * sizeof(double));
+        c->hist_cl  = realloc(c->hist_cl, c->hist_cap * sizeof(double));
+    }
+    c->hist_t[c->hist_n]  = t;
+    c->hist_cd[c->hist_n] = c->cd;
+    c->hist_cl[c->hist_n] = c->cl;
+    c->hist_n++;
+}
+
+/*************************************************************
+ * Function:    cyl_report
+ * Input:       g     (ChGrid*) — grid (unused)
+ *              t     (double)  — time reached, s
+ *              accel (double)  — scaled acceleration
+ *              ctx   (void*)   — CylCtx with the latest forces
+ * Output:      void
+ * Description: The periodic progress line.
+ **************************************************************/
+static void cyl_report(ChGrid *g, double t, double accel, void *ctx)
+{
+    CylCtx *c = ctx;
+
+    (void)g;
+    printf("    t = %-8.4g  drag %-9.5g lift %-9.5g  change %.3g\n",
+           t, c->cd, c->cl, accel);
+    fflush(stdout);
+}
+
+/*************************************************************
  * Function:    channel_usage
  * Input:       void
  * Output:      void — usage text printed to stdout
@@ -618,42 +905,39 @@ static void channel_usage(void)
  * Function:    run_channel
  * Input:       args (const char*) — text following the "channel" keyword
  * Output:      void — results printed and stored in $channel_* variables
- * Description: Reads the set-up, builds the grid and the staircase
- *              cylinder, time-steps until the flow settles or the
- *              time runs out, then reports forces, pressure drop,
- *              shedding frequency and the benchmark comparison.
+ * Description: Reads the set-up, has the core build the grid with a
+ *              staircase cylinder in it, time-steps until the flow
+ *              settles or the time runs out, then reports forces,
+ *              pressure drop, shedding frequency and the benchmark
+ *              comparison.
  **************************************************************/
 void run_channel(const char *args)
 {
-    double  L = CH_L_DEFAULT, H = CH_H_DEFAULT;
-    double  cx = CH_CX_DEFAULT, cy = CH_CY_DEFAULT, D = CH_D_DEFAULT;
-    double  U = CH_U_DEFAULT, nu = CH_NU_DEFAULT, rho = CH_RHO_DEFAULT;
-    double  res_d = CH_RES_DEFAULT, t_end = CH_T_DEFAULT, tol = CH_TOL_DEFAULT;
-    double  Re = 0.0;
-    int     haveRe = 0;
-    int     found  = 0;
-    ChGrid  g;
-    int     stride;
-    int     nx, ny, res;
-    int     i, j, k;
-    double  h, x, y, r2;
-    double  dt, gamma, umax, vmax;
-    double  omegaSor, sorTol;
-    double  t = 0.0;
-    int     step = 0;
-    int     steady = 0;
-    double  change = 0.0;
-    double  accel;
-    double  fx, fy, cd = 0.0, cl = 0.0;
-    double  cdmax, clmax, cdmean, clmean, dp, st;
-    double *hist_t = NULL, *hist_cd = NULL, *hist_cl = NULL;
-    int     hist_n = 0, hist_cap = 0;
-    int     first, nkeep, ref;
-    int     box[4];
-    double  mx, my, mx_old, my_old;
-    double  *tv, *cdv, *clv;
-    Matrix  *uf, *vf, *pf, *wf, *sf;
-    double   uc_l, uc_r, vc_b, vc_t;
+    double    L = CH_L_DEFAULT, H = CH_H_DEFAULT;
+    double    cx = CH_CX_DEFAULT, cy = CH_CY_DEFAULT, D = CH_D_DEFAULT;
+    double    U = CH_U_DEFAULT, nu = CH_NU_DEFAULT, rho = CH_RHO_DEFAULT;
+    double    res_d = CH_RES_DEFAULT, t_end = CH_T_DEFAULT, tol = CH_TOL_DEFAULT;
+    double    Re = 0.0;
+    int       haveRe = 0;
+    int       found  = 0;
+    ChGrid    g;
+    ChSetup   s;
+    ChHooks   hooks;
+    ChRunInfo info;
+    CylCtx    c;
+    int       stride;
+    int       nx, ny, res;
+    int       i, j, k;
+    double    h;
+    double    t;
+    int       step;
+    int       steady;
+    double    cd, cl;
+    double    cdmax, clmax, cdmean, clmean, dp, st;
+    int       first, nkeep, ref;
+    double   *tv, *cdv, *clv;
+    Matrix   *uf, *vf, *pf, *wf, *sf;
+    double    uc_l, uc_r, vc_b, vc_t;
 
     /* ── "channel ?" ── */
     while (isspace(*args)) args++;
@@ -687,16 +971,29 @@ void run_channel(const char *args)
         printf("  channel: the inlet speed U must be above zero.\n\n");
         return;
     }
-    g.Umean = 2.0 * U / 3.0;
-    Re      = g.Umean * D / nu;
+    Re = (2.0 * U / 3.0) * D / nu;
 
     res = (int)(res_d + 0.5);
     if (res < CH_RES_MIN) res = CH_RES_MIN;
     if (res > CH_RES_MAX) res = CH_RES_MAX;
+    if (t_end <= 0.0) t_end = CH_T_DEFAULT;
+    if (tol   <= 0.0) tol   = CH_TOL_DEFAULT;
 
-    h  = D / res;
-    nx = (int)(L / h + 0.5);
-    ny = (int)(H / h + 0.5);
+    /* ── the set-up the core will build ── */
+    s.L     = L;
+    s.H     = H;
+    s.U     = U;
+    s.nu    = nu;
+    s.rho   = rho;
+    s.D     = D;
+    s.res   = res;
+    s.t_end = t_end;
+    s.tol   = tol;
+    s.gamma_safety = 0.0;           /* DFG-tuned default */
+    s.Uref         = 0.0;           /* tolerance on the mean inlet speed */
+
+    /* ── size and fit checks before anything is allocated ── */
+    ch_grid_dims(&s, &nx, &ny, &h);
     if ((double)nx * ny > CH_CELLS_MAX)
     {
         printf("  channel: %d x %d is too many grid cells.  Lower res.\n\n", nx, ny);
@@ -709,81 +1006,31 @@ void run_channel(const char *args)
         printf("           clear of the walls and both ends.\n\n");
         return;
     }
-    if (t_end <= 0.0) t_end = CH_T_DEFAULT;
-    if (tol   <= 0.0) tol   = CH_TOL_DEFAULT;
 
-    /* ── allocate ── */
-    stride  = nx + 2;
-    g.nx    = nx;
-    g.ny    = ny;
-    g.h     = h;
-    g.nu    = nu;
-    g.D     = D;
-    g.rho   = rho;
-    g.solid = calloc((size_t)stride * (ny + 2), 1);
-    g.ptype = calloc((size_t)stride * (ny + 2), 1);
-    g.u     = calloc((size_t)stride * (ny + 2), sizeof(double));
-    g.v     = calloc((size_t)stride * (ny + 2), sizeof(double));
-    g.F     = calloc((size_t)stride * (ny + 2), sizeof(double));
-    g.G     = calloc((size_t)stride * (ny + 2), sizeof(double));
-    g.uin   = calloc((size_t)ny + 2, sizeof(double));
-    g.p     = mat_new(ny + 2, stride);
-    g.rhs   = mat_new(ny + 2, stride);
+    /* ── hooks: the circle, the forces, the progress line ── */
+    memset(&c, 0, sizeof c);
+    c.cx = cx;
+    c.cy = cy;
+    c.D  = D;
+    hooks.body   = cyl_body;
+    hooks.step   = cyl_step;
+    hooks.report = cyl_report;
+    hooks.ctx    = &c;
 
-    /* ── staircase cylinder: every cell whose centre is inside ── */
-    for (j = 1; j <= ny; j++)
-    {
-        for (i = 1; i <= nx; i++)
-        {
-            x  = (i - 0.5) * h - cx;
-            y  = (j - 0.5) * h - cy;
-            r2 = x * x + y * y;
-            g.solid[IX(i, j)] = (r2 < 0.25 * D * D);
-        }
-    }
-
-    /* ── pressure cell types: fluid solved, cylinder and closed
-          boundaries are walls, the outlet ghost column holds p = 0 ── */
-    for (j = 0; j <= ny + 1; j++)
-    {
-        for (i = 0; i <= nx + 1; i++)
-        {
-            if (i == nx + 1 && j >= 1 && j <= ny)
-                g.ptype[IX(i, j)] = NS_CELL_FIXED;
-            else if (is_fluid(&g, i, j))
-                g.ptype[IX(i, j)] = NS_CELL_FLUID;
-            else
-                g.ptype[IX(i, j)] = NS_CELL_SOLID;
-        }
-    }
-
-    /* ── parabolic inlet, and the whole channel starts already flowing
-          with it — reaches steady state far sooner than from rest ── */
-    for (j = 1; j <= ny; j++)
-    {
-        y        = (j - 0.5) * h;
-        g.uin[j] = 4.0 * U * y * (H - y) / (H * H);
-        for (i = 0; i <= nx; i++)
-            g.u[IX(i, j)] = g.uin[j];
-    }
-    apply_boundaries(&g);
+    if (ch_grid_init(&g, &s, &hooks) != 0) return;   /* checked above */
+    stride = nx + 2;
 
     /* ── force-balance box: one diameter clear of the cylinder each
           side, snapped to cell faces, kept inside the channel ── */
-    box[0] = (int)floor((cx - D) / h);
-    box[1] = (int)ceil ((cx + D) / h);
-    box[2] = (int)floor((cy - D) / h);
-    box[3] = (int)ceil ((cy + D) / h);
-    if (box[0] < 2)      box[0] = 2;
-    if (box[1] > nx - 2) box[1] = nx - 2;
-    if (box[2] < 2)      box[2] = 2;
-    if (box[3] > ny - 2) box[3] = ny - 2;
-    box_momentum(&g, box, &mx_old, &my_old);
-
-    /* SOR factor for a long thin box — the short side sets the pace */
-    omegaSor = 2.0 / (1.0 + sin(M_PI * h / H));
-    if (omegaSor > 1.9) omegaSor = 1.9;
-    sorTol   = CH_SOR_TOL_REL * g.Umean * g.Umean;
+    c.box[0] = (int)floor((cx - D) / h);
+    c.box[1] = (int)ceil ((cx + D) / h);
+    c.box[2] = (int)floor((cy - D) / h);
+    c.box[3] = (int)ceil ((cy + D) / h);
+    if (c.box[0] < 2)      c.box[0] = 2;
+    if (c.box[1] > nx - 2) c.box[1] = nx - 2;
+    if (c.box[2] < 2)      c.box[2] = 2;
+    if (c.box[3] > ny - 2) c.box[3] = ny - 2;
+    box_momentum(&g, c.box, &c.mx_old, &c.my_old);
 
     printf("\n  Channel Flow Past a Cylinder\n");
     printf("  ──────────────────────────────────────────────\n");
@@ -794,95 +1041,33 @@ void run_channel(const char *args)
     fflush(stdout);
 
     /* ── march in time ── */
-    while (t < t_end)
+    if (ch_solve(&g, &s, &hooks, &info) != 0)
     {
-        /* largest speeds on the grid, for the stability limits */
-        umax = U;
-        vmax = 0.0;
-        for (k = 0; k < stride * (ny + 2); k++)
-        {
-            if (fabs(g.u[k]) > umax) umax = fabs(g.u[k]);
-            if (fabs(g.v[k]) > vmax) vmax = fabs(g.v[k]);
-        }
-
-        /* time step: diffusion, then convection in x and y */
-        dt = 0.25 * h * h / nu;
-        if (h / umax < dt)                dt = h / umax;
-        if (vmax > 0.0 && h / vmax < dt)  dt = h / vmax;
-        dt *= CH_TAU;
-
-        /* the last step is NOT trimmed to land on t_end exactly: a sliver
-           of a step makes the momentum change per second in the force
-           balance jump, and drag would end on a fake dip */
-
-        /* a pinch of upwinding to keep the wake smooth — more than this
-           and numerical viscosity starts doing the fluid's job for it */
-        gamma = CH_GAMMA_SAFETY * fmax(umax, vmax) * dt / h;
-        if (gamma > 1.0) gamma = 1.0;
-
-        compute_FG(&g, dt, gamma);
-        change = project(&g, dt, omegaSor, sorTol);
-        apply_boundaries(&g);
-
-        t += dt;
-        step++;
-
-        /* blow-up check: NaN spreads faster than gossip */
-        if (isnan(change) || isinf(change))
-        {
-            printf("  channel: the solution became unstable at t = %.4g s.\n", t);
-            printf("           Try a finer grid (larger res).\n\n");
-            goto cleanup;
-        }
-
-        /* ── forces this step, into the history ── */
-        box_momentum(&g, box, &mx, &my);
-        cylinder_forces(&g, box, (mx - mx_old) / dt, (my - my_old) / dt,
-                        &fx, &fy);
-        mx_old = mx;
-        my_old = my;
-        cd = 2.0 * fx / (rho * g.Umean * g.Umean * D);
-        cl = 2.0 * fy / (rho * g.Umean * g.Umean * D);
-
-        if (hist_n == hist_cap)
-        {
-            hist_cap = hist_cap ? hist_cap * 2 : 4096;
-            hist_t   = realloc(hist_t,  hist_cap * sizeof(double));
-            hist_cd  = realloc(hist_cd, hist_cap * sizeof(double));
-            hist_cl  = realloc(hist_cl, hist_cap * sizeof(double));
-        }
-        hist_t[hist_n]  = t;
-        hist_cd[hist_n] = cd;
-        hist_cl[hist_n] = cl;
-        hist_n++;
-
-        /* settled?  acceleration, scaled by D / Umean^2 */
-        accel = change / dt * D / (g.Umean * g.Umean);
-        if (accel < tol) { steady = 1; break; }
-
-        if (step % CH_REPORT_EVERY == 0)
-        {
-            printf("    t = %-8.4g  drag %-9.5g lift %-9.5g  change %.3g\n",
-                   t, cd, cl, accel);
-            fflush(stdout);
-        }
+        printf("  channel: the solution became unstable at t = %.4g s.\n", info.t);
+        printf("           Try a finer grid (larger res).\n\n");
+        goto cleanup;
     }
+    t      = info.t;
+    step   = info.steps;
+    steady = info.steady;
+    cd     = c.cd;
+    cl     = c.cl;
 
     /* ── results ── */
-    first  = steady ? hist_n - 1 : (2 * hist_n) / 3;   /* last third if moving */
+    first  = steady ? c.hist_n - 1 : (2 * c.hist_n) / 3;   /* last third if moving */
     cdmax  = -1e300; clmax = -1e300; cdmean = 0.0; clmean = 0.0;
-    for (k = first; k < hist_n; k++)
+    for (k = first; k < c.hist_n; k++)
     {
-        cdmax   = fmax(cdmax, hist_cd[k]);
-        clmax   = fmax(clmax, hist_cl[k]);
-        cdmean += hist_cd[k];
-        clmean += hist_cl[k];
+        cdmax   = fmax(cdmax, c.hist_cd[k]);
+        clmax   = fmax(clmax, c.hist_cl[k]);
+        cdmean += c.hist_cd[k];
+        clmean += c.hist_cl[k];
     }
-    cdmean /= (hist_n - first);
-    clmean /= (hist_n - first);
+    cdmean /= (c.hist_n - first);
+    clmean /= (c.hist_n - first);
 
     st = steady ? 0.0
-                : shedding_strouhal(hist_t, hist_cl, hist_n, first, D, g.Umean);
+                : shedding_strouhal(c.hist_t, c.hist_cl, c.hist_n, first, D, g.Umean);
     dp = pressure_drop(&g, cy);
 
     /* report the mean when shedding, the final value when steady */
@@ -968,16 +1153,16 @@ void run_channel(const char *args)
     set_var("channel_ref",    (double)ref);
 
     /* ── force history, thinned to at most CH_HIST_MAX points ── */
-    nkeep = hist_n < CH_HIST_MAX ? hist_n : CH_HIST_MAX;
+    nkeep = c.hist_n < CH_HIST_MAX ? c.hist_n : CH_HIST_MAX;
     tv  = malloc(nkeep * sizeof(double));
     cdv = malloc(nkeep * sizeof(double));
     clv = malloc(nkeep * sizeof(double));
     for (k = 0; k < nkeep; k++)
     {
-        int src = (nkeep > 1) ? (int)((double)k * (hist_n - 1) / (nkeep - 1)) : 0;
-        tv[k]  = hist_t[src];
-        cdv[k] = hist_cd[src];
-        clv[k] = hist_cl[src];
+        int src = (nkeep > 1) ? (int)((double)k * (c.hist_n - 1) / (nkeep - 1)) : 0;
+        tv[k]  = c.hist_t[src];
+        cdv[k] = c.hist_cd[src];
+        clv[k] = c.hist_cl[src];
     }
     set_mat_var("channel_tv",  ns_vec_from_array(tv,  nkeep));
     set_mat_var("channel_cdv", ns_vec_from_array(cdv, nkeep));
@@ -1020,8 +1205,6 @@ void run_channel(const char *args)
     printf("  $channel_solid  [%d x %d] fields\n\n", ny, nx);
 
 cleanup:
-    free(g.solid); free(g.ptype);
-    free(g.u); free(g.v); free(g.F); free(g.G); free(g.uin);
-    mat_free(g.p); mat_free(g.rhs);
-    free(hist_t); free(hist_cd); free(hist_cl);
+    ch_grid_free(&g);
+    free(c.hist_t); free(c.hist_cd); free(c.hist_cl);
 }

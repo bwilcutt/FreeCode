@@ -15,10 +15,10 @@
  *                   1. Advance vorticity with an explicit Euler step of
  *                        dw/dt + u dw/dx + v dw/dy = (1/Re) lap(w)
  *                      using central differences.
- *                   2. Solve the Poisson equation  lap(psi) = -w  with
- *                      successive over-relaxation (SOR), warm-started from
- *                      the previous step's psi — the shared solver in
- *                      ns_core.c, which channel.c uses as well.
+ *                   2. Solve the Poisson equation  lap(psi) = -w  with the
+ *                      shared multigrid-preconditioned conjugate-gradient
+ *                      solver in ns_core.c (channel.c and slittest.c use
+ *                      it too), warm-started from the previous step's psi.
  *                   3. Re-apply Thom's wall vorticity formula, which is
  *                      where the moving lid actually enters the problem.
  *                 Stop when the largest vorticity change per unit time
@@ -30,7 +30,7 @@
  *                 mat_new / MAT /
  *                 set_mat_var         field and vector storage
  *                 vf_interp()         benchmark comparison
- *                 ns_sor_poisson /
+ *                 ns_poisson /
  *                 ns_vec_from_array   shared with channel.c (ns_core.c)
  *                 vf_min / vf_max     summary of the centreline profiles
  *
@@ -62,8 +62,8 @@
 #define NS_N_MAX          257       /* above this, go make coffee. Then a second one */
 #define NS_TOL_DEFAULT    1e-5      /* steady-state tolerance (relative)            */
 #define NS_MAXIT_DEFAULT  400000    /* time-step ceiling                            */
-#define NS_SOR_MAX        200       /* SOR sweeps allowed per time step             */
-#define NS_SOR_TOL        1e-8      /* SOR stops when psi changes less than this    */
+#define NS_POISSON_MAX    200       /* pressure-solver iterations per time step     */
+#define NS_POISSON_TOL    1e-8      /* solver stops when psi changes less than this */
 #define NS_REPORT_EVERY   5000      /* progress line spacing, in time steps         */
 #define NS_GHIA_POINTS    17        /* rows in each Ghia table                      */
 #define NS_GHIA_RE400     1         /* column index of Re = 400                     */
@@ -287,7 +287,6 @@ void run_navier(const char *args)
     int     gIdx;
     double  h;
     double  dt;
-    double  omegaSor;
     double  rate     = 0.0;
     double  wScale;
     double  psiMin;
@@ -363,9 +362,6 @@ void run_navier(const char *args)
     if (2.0/Re  < dt) dt = 2.0 / Re;
     dt *= 0.8;
 
-    /* ── optimal SOR factor for the square-grid Poisson problem ── */
-    omegaSor = 2.0 / (1.0 + sin(M_PI * h));
-
     /* ── fields: row j is y = j*h from the bottom, column i is x = i*h ── */
     psi  = mat_new(N, N);
     w    = mat_new(N, N);
@@ -397,7 +393,7 @@ void run_navier(const char *args)
         swap = w; w = wNew; wNew = swap;
 
         /* 2. stream function from the new vorticity: lap(psi) = -w */
-        ns_sor_poisson(psi, w, cellType, h, omegaSor, NS_SOR_MAX, NS_SOR_TOL);
+        ns_poisson(psi, w, cellType, h, NS_POISSON_MAX, NS_POISSON_TOL);
 
         /* 3. wall vorticity from the new stream function */
         apply_wall_vorticity(psi, w, N, h);

@@ -16,6 +16,8 @@
 #include "asteroid_graph.h"
 #include "navier_graph.h"
 #include "channel_graph.h"
+#include "slittest_graph.h"
+#include "schrodinger_graph.h"
 #include "pipe_mgr.h"
 
 #include <gtk/gtk.h>
@@ -346,6 +348,8 @@ static void open_plot(const ModuleDesc *desc)
     else if (desc->plot_type == PLOT_ASTEROID)  graph_window_open_asteroid();
     else if (desc->plot_type == PLOT_NAVIER)    graph_window_open_navier();
     else if (desc->plot_type == PLOT_CHANNEL)   graph_window_open_channel();
+    else if (desc->plot_type == PLOT_SLITTEST)  graph_window_open_slittest();
+    else if (desc->plot_type == PLOT_SCHRODINGER) graph_window_open_schrodinger();
     else                                        graph_window_open(desc);
 
     /* no window opened (e.g. no data)?  don't let the report wander
